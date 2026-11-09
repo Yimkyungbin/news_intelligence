@@ -38,10 +38,11 @@
   - [x] 4.2 경계 사례 확인: 한국어+영문 용어 혼합("RAG 파이프라인 구축 사례" → ko), 영어 위주 혼합 → en, 빈 문자열·숫자 → en
   - [x] 4.3 `npm run verify:full` 통과 (verify, DB 9/9, E2E 18/18)
 
-- [ ] 5. Phase 2 수집기 언어 처리
-  - 소스 제공 언어 우선, 없으면 `detectLanguage` 적용
+- [x] 5. Phase 2 수집기 언어 처리
+  - `itemLanguage()`: 소스 제공 언어 우선(arXiv = en), 없으면 `detectLanguage(title, summary)` (`src/lib/collectors/classify.ts`)
+  - 주제 언어 조건(ko/en)에 맞는 콘텐츠만 연결
   - _요구사항: 4.2_
-  - [ ] 5.1 수집기 단위 테스트(소스 언어 있음/없음) 및 `npm run verify:full` 통과
+  - [x] 5.1 단위 테스트(arXiv 언어 en, ko 주제는 영어 콘텐츠 미연결·한국어 콘텐츠 연결) 및 `npm run verify:full` 통과
 
 - [ ] 6. Phase 3 한국어 AI 요약
   - AIProvider 프롬프트에 한국어 출력 지시, `ai_processing_allowed` 확인 후에만 실행

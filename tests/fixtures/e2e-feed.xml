@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- E2E 전용 고정 피드 (scripts/e2e_smoke.py 가 로컬 서버로 제공) -->
+<rss version="2.0">
+  <channel>
+    <title>E2E Fixture Feed</title>
+    <link>https://fixture.example.org/</link>
+    <item>
+      <title>E2E fixture: Agentic AI deployment patterns</title>
+      <link>https://fixture.example.org/posts/agentic-ai-patterns</link>
+      <description><![CDATA[<p>How teams deploy <b>agentic AI</b> with tool use.</p>]]></description>
+      <pubDate>Mon, 09 Nov 2026 01:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>E2E fixture: 오늘의 요리 레시피</title>
+      <link>https://fixture.example.org/posts/unrelated-recipe</link>
+      <description>관심 주제와 관련 없는 글</description>
+      <pubDate>Mon, 09 Nov 2026 02:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

@@ -25,14 +25,17 @@
   - [x] 5.1 `git init -b main`, 첫 커밋(`8d7d082`), 원격 `https://github.com/Yimkyungbin/news_intelligence` 연결 및 push
     - 빈 저장소라 첫 커밋만 `main` 에 직접 push (이후 변경은 기능 브랜치 → PR)
   - [x] 5.2 커밋 전 `npm run verify:full` 통과 (DB 9/9, E2E 18/18), `.env.local` 미포함, 비밀값 패턴 검사, `supabase/.branches`·`supabase/.temp` 제외
-  - [ ] 5.3 `main` 보호 규칙 설정 (PR 필수, 강제 push 금지, 작업 6 이후 상태 검사 필수) — 사용자 확인 후 진행
+  - [x] 5.3 `main` 보호 규칙: PR 필수(승인 0명), 관리자 포함 적용, 강제 push·삭제 금지, 대화 해결 필수, 필수 상태 검사 `verify-full`(strict)
+    - 확인: `main` 직접 push 시 `GH006 Protected branch update failed` 로 거부됨
 
-- [ ] 6. GitHub Actions CI 구성
-  - `.github/workflows/verify.yml`: Node 설치 → `npm ci` → uv 설치 → `npx supabase start` → `.env.local` 생성 → `npm run verify:full`
-  - PR 병합 조건으로 이 워크플로를 필수 상태 검사로 지정
+- [x] 6. GitHub Actions CI 구성
+  - `.github/workflows/verify.yml`: Node 22 → `npm ci` → uv → `npx supabase start` → `.env.local`(로컬 기본 키) → Playwright → `npm run verify:full`, 실패 시 로그·스크린샷 아티팩트
+  - 러너 `ubuntu-24.04` 고정 (첫 실행에서 `ubuntu-latest`=26.04 를 Playwright 1.55 가 지원하지 않아 실패 → 수정)
+  - `verify-full` 을 필수 상태 검사로 지정
   - _요구사항: 4.2_
-  - [ ] 6.1 실패하는 테스트를 포함한 PR로 병합이 차단되는지 확인
-  - [ ] 6.2 정상 PR에서 워크플로 통과 확인
+  - [x] 6.1 실패 감지 확인: 첫 실행이 실제로 실패(Playwright 설치 단계)하여 PR 상태가 실패로 표시됨
+  - [x] 6.2 정상 PR(#1)에서 워크플로 통과(3분 58초) 후 병합 (`2cdac4a`)
+  - [ ] 6.3 필수 상태 검사 등록 이후, 실패 상태 PR 의 병합 버튼이 차단되는지 확인 (다음 실패 PR 발생 시)
 
 - [ ] 7. 마이그레이션 반영 절차 검증
   - 로컬 `npx supabase db reset` → `npm run test:db` 통과 → 사용자 확인 → `npx supabase db push`
