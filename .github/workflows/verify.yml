@@ -19,7 +19,8 @@ permissions:
 jobs:
   verify-full:
     name: verify-full
-    runs-on: ubuntu-latest
+    # Playwright 1.55 는 ubuntu 26.04(ubuntu-latest) 를 지원하지 않아 러너를 고정
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: 소스 체크아웃
