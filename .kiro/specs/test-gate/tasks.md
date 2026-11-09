@@ -21,9 +21,11 @@
   - _요구사항: 2.1, 2.2, 2.3, 2.4, 5.1, 5.2_
 
 - [ ] 5. Git 저장소 초기화 및 브랜치 전략 적용
-  - `git init`, 첫 커밋, GitHub 원격 저장소 연결, `main` 보호 규칙(PR 필수, 상태 검사 필수)
   - _요구사항: 4.1_
-  - [ ] 5.1 커밋 전 `npm run verify:full` 통과, `.env*` 미포함 확인
+  - [x] 5.1 `git init -b main`, 첫 커밋(`8d7d082`), 원격 `https://github.com/Yimkyungbin/news_intelligence` 연결 및 push
+    - 빈 저장소라 첫 커밋만 `main` 에 직접 push (이후 변경은 기능 브랜치 → PR)
+  - [x] 5.2 커밋 전 `npm run verify:full` 통과 (DB 9/9, E2E 18/18), `.env.local` 미포함, 비밀값 패턴 검사, `supabase/.branches`·`supabase/.temp` 제외
+  - [ ] 5.3 `main` 보호 규칙 설정 (PR 필수, 강제 push 금지, 작업 6 이후 상태 검사 필수) — 사용자 확인 후 진행
 
 - [ ] 6. GitHub Actions CI 구성
   - `.github/workflows/verify.yml`: Node 설치 → `npm ci` → uv 설치 → `npx supabase start` → `.env.local` 생성 → `npm run verify:full`

@@ -1,0 +1,71 @@
+# 테스트 게이트 CI: PR 및 main push 시 npm run verify:full 실행
+# 로컬과 동일한 명령을 사용해 검증 기준을 일치시킨다 (.kiro/specs/test-gate)
+name: verify
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify-full:
+    name: verify-full
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 소스 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node.js 설치
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: uv 설치
+        uses: astral-sh/setup-uv@v6
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: 로컬 Supabase 시작
+        run: npx supabase start -x studio,imgproxy,edge-runtime,logflare,vector,realtime,storage-api,postgres-meta,supavisor
+
+      - name: .env.local 생성 (로컬 Supabase 기본 키, 운영 비밀값 아님)
+        run: |
+          npx supabase status -o env \
+            | grep -E '^(API_URL|PUBLISHABLE_KEY|SECRET_KEY)=' \
+            | sed -e 's/^API_URL=/NEXT_PUBLIC_SUPABASE_URL=/' \
+                  -e 's/^PUBLISHABLE_KEY=/NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=/' \
+                  -e 's/^SECRET_KEY=/SUPABASE_SECRET_KEY=/' > .env.local
+          echo 'NEXT_PUBLIC_SITE_URL=http://localhost:3000' >> .env.local
+          cut -d= -f1 .env.local
+
+      - name: Playwright 브라우저 설치
+        run: uv run --with playwright==1.55.0 python -m playwright install --with-deps chromium
+
+      - name: 전체 검증 (npm run verify:full)
+        run: npm run verify:full
+
+      - name: 실패 시 서버 로그·스크린샷 업로드
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-artifacts
+          path: |
+            /tmp/lih-verify-server.log
+            /tmp/lih-e2e/
+          if-no-files-found: ignore
+
+      - name: Supabase 정지
+        if: always()
+        run: npx supabase stop --no-backup
