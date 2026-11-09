@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Spec 작업 완료 후 검증",
+      "trigger": "PostTaskExec",
+      "description": "Spec 작업이 완료되면 typecheck → lint → build 검증 게이트를 실행합니다. 실패 시 작업을 완료로 보고하지 않습니다.",
+      "action": {
+        "type": "command",
+        "command": "npm run verify",
+        "timeout": 600
+      }
+    }
+  ]
+}
