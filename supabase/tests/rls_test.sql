@@ -88,6 +88,73 @@ begin
     assert sqlerrm <> 'SHOULD_NOT_REACH', 'client must not write ai_insights';
   end;
   raise notice 'PASS ai_insights: read-only for clients';
+
+  -- ===== Phase 2 =====
+  -- 8) 클라이언트는 수집 이력을 위조할 수 없음
+  begin
+    insert into public.collection_logs (user_id, source_id, status, collected_count)
+      values ('00000000-0000-0000-0000-00000000000a', src, 'success', 999);
+    raise exception 'SHOULD_NOT_REACH';
+  exception when others then
+    assert sqlerrm <> 'SHOULD_NOT_REACH', 'client must not insert collection_logs';
+  end;
+  raise notice 'PASS collection_logs: clients cannot forge logs';
+
+  -- 9) 사용자 RSS 소스: http / 다른 유형 거부
+  begin
+    insert into public.data_sources (user_id, slug, name, source_type, source_url)
+      values ('00000000-0000-0000-0000-00000000000a', 'u-http', 'http feed', 'rss', 'http://example.com/feed');
+    raise exception 'SHOULD_NOT_REACH';
+  exception when others then
+    assert sqlerrm <> 'SHOULD_NOT_REACH', 'http user feed must be rejected';
+  end;
+  begin
+    insert into public.data_sources (user_id, slug, name, source_type, source_url)
+      values ('00000000-0000-0000-0000-00000000000a', 'u-api', 'api', 'public_api', 'https://example.com/api');
+    raise exception 'SHOULD_NOT_REACH';
+  exception when others then
+    assert sqlerrm <> 'SHOULD_NOT_REACH', 'non-rss user source must be rejected';
+  end;
+
+  -- 10) 사용자 RSS 소스: 권한 값은 서버가 강제 (AI 처리 허용 위조 불가)
+  insert into public.data_sources (user_id, slug, name, source_type, source_url, ai_processing_allowed,
+      external_llm_allowed, permission_status, retention_days, is_active)
+    values ('00000000-0000-0000-0000-00000000000a', 'u-ok', 'my feed', 'rss', 'https://example.com/feed', true, true, 'AVAILABLE', 9999, true);
+  select count(*) into n from public.data_sources
+    where slug = 'u-ok' and not ai_processing_allowed and not external_llm_allowed
+      and permission_status = 'NOT_VERIFIED' and retention_days = 90;
+  assert n = 1, 'user source permission fields must be forced';
+  update public.data_sources set source_url = 'https://evil.example/feed', ai_processing_allowed = true where slug = 'u-ok';
+  select count(*) into n from public.data_sources
+    where slug = 'u-ok' and source_url = 'https://example.com/feed' and not ai_processing_allowed;
+  assert n = 1, 'user must not change feed url or permissions after insert';
+  raise notice 'PASS user feed: https only, permissions forced by server';
+
+  -- 11) 보관 기간 삭제 함수는 클라이언트가 호출할 수 없음
+  begin
+    perform public.purge_expired_content();
+    raise exception 'SHOULD_NOT_REACH';
+  exception when others then
+    assert sqlerrm <> 'SHOULD_NOT_REACH', 'client must not call purge_expired_content';
+  end;
+  raise notice 'PASS purge function: not callable by clients';
+end $$;
+
+-- 12) 시스템 작업(cron) 이력은 모든 사용자가 조회 가능, 다른 사용자의 수동 작업 이력은 불가
+reset role;
+insert into public.collection_logs (user_id, source_id, status)
+  select null, id, 'success' from public.data_sources where slug = 'hacker-news' and user_id is null;
+insert into public.collection_logs (user_id, source_id, status)
+  select '00000000-0000-0000-0000-00000000000b', id, 'success' from public.data_sources where slug = 'hacker-news' and user_id is null;
+set local role authenticated;
+do $$
+declare n int;
+begin
+  select count(*) into n from public.collection_logs where user_id is null;
+  assert n = 1, format('A should see system logs, got %s', n);
+  select count(*) into n from public.collection_logs where user_id = '00000000-0000-0000-0000-00000000000b';
+  assert n = 0, 'A must not see B manual logs';
+  raise notice 'PASS collection_logs visibility';
 end $$;
 
 -- ===== 사용자 B로 전환: A의 콘텐츠를 저장(참조)하려는 시도 =====

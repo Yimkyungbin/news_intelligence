@@ -16,7 +16,9 @@ inclusion: always
 | 3. E2E 테스트 | `npm run test:e2e` | 로컬 Supabase + 앱 실행 | 화면, Server Action, 인증, 라우팅 변경 |
 | 전체 | `npm run verify:full` | 로컬 Supabase 실행 | 커밋·배포 전 필수 |
 
-- `npm run verify` = `typecheck` → `lint` → `build`
+- `npm run verify` = `typecheck` → `lint` → `test:unit` → `build`
+- 단위 테스트는 Node 내장 테스트 러너(`node --test`)를 사용한다. 테스트 대상 순수 모듈은 `@/` 별칭 대신 상대 경로와 `.ts` 확장자로 import 한다 (`src/lib/collectors/*`, `src/lib/language.ts`).
+- 순수 로직 변경(파서, 분류, 검증): `tests/unit/*.test.ts` 에 테스트 추가
 - `npm run verify:full` = `verify` → `test:db` → (앱 미실행 시 `next start` 자동 기동) → `test:e2e`
 - Python 실행 환경은 `uv`를 사용한다 (E2E는 `uv run --with playwright==...`).
 

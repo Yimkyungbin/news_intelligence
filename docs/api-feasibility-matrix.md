@@ -23,13 +23,23 @@
 
 ## 2. 외부 소스 (Source B)
 
-| 소스 | 방식 | 인증 | 인기 지표 | 상태 | 비고 |
-|---|---|---|---|---|---|
-| Hacker News | 공식 Firebase API | 불필요 | points, comments | NOT_VERIFIED | Phase 2 기본 소스 |
-| GitHub | REST API | 토큰 권장 | stars | NOT_VERIFIED | |
-| arXiv | 공식 API | 불필요 | 없음 | NOT_VERIFIED | 논문별 라이선스 상이 |
-| Hugging Face | 공개 API | 선택 | likes, downloads | NOT_VERIFIED | |
-| 기업 공식 블로그 (OpenAI, Google, DeepMind, NVIDIA, AWS, Microsoft 등) | RSS | 불필요 | 없음 | NOT_VERIFIED | 제목·링크·요약만 저장. Anthropic·Meta는 RSS 제공 여부 확인 필요 |
+응답 확인: 2026-11-10. 실제 수집 1회 확인(로컬): 9개 소스 모두 success, 약 9초.
+권한 상태는 약관 상세 검토 전이므로 NOT_VERIFIED 를 유지하며, 제목·링크·요약(500자)·출처 제공 지표만 저장·표시한다. AI 처리는 차단.
+
+| 소스 | 방식 | 인증 | 인기 지표 | 응답 | 수집 | 상태 | 비고 |
+|---|---|---|---|---|---|---|---|
+| Hacker News | Firebase API (topstories 상위 60) | 불필요 | points, comments | 200 | 활성 | NOT_VERIFIED | |
+| GitHub | search/repositories (최근 30일, llm·ai-agents·rag) | 선택 `GITHUB_TOKEN` | stars | 200 | 활성 | NOT_VERIFIED | 비인증 검색 분당 10회 |
+| arXiv | export API (cs.AI/CL/LG 최신 50) | 불필요 | 없음 | 200 | 활성 | NOT_VERIFIED | 1회 요청, 논문별 라이선스 상이 |
+| Hugging Face | api/models (trending 30) | 불필요 | likes, downloads | 200 | 활성 | NOT_VERIFIED | |
+| OpenAI News | RSS | 불필요 | 없음 | 200 | 활성 | NOT_VERIFIED | |
+| Google AI Blog | RSS | 불필요 | 없음 | 200 | 활성 | NOT_VERIFIED | |
+| Google DeepMind Blog | RSS | 불필요 | 없음 | 200 | 활성 | NOT_VERIFIED | |
+| NVIDIA Technical Blog | Atom | 불필요 | 없음 | 200 | 활성 | NOT_VERIFIED | |
+| AWS ML Blog | RSS | 불필요 | 없음 | 200 | 활성 | NOT_VERIFIED | |
+| Microsoft AI Blog | RSS | - | - | 410 Gone | 비활성 | NOT_VERIFIED | 대체 피드 확인 필요 |
+| Anthropic News, Meta AI Blog | - | - | - | 404 (RSS 없음) | 비활성 | NOT_VERIFIED | 스크래핑하지 않음 |
+| 사용자 RSS | RSS/Atom | 불필요 | 없음 | 등록 시 확인 | 사용자 선택 | NOT_VERIFIED | https만, SSRF 차단, 본인에게만 저장 |
 | Reddit | Data API (OAuth) | 필수 + 사전 승인 | upvotes | CONDITIONAL | Responsible Builder Policy 승인, 무료 비상업 100 QPM |
 | X | API v2 Pay-per-use | 필수, 유료 | likes 등 | CONDITIONAL | 무료 티어 없음, 게시글 읽기당 약 $0.005 (2차 자료). 예산 상한 필요 |
 

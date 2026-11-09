@@ -35,6 +35,16 @@ def check(name: str, fn):
         print(f"FAIL {name}: {str(e)[:300]}")
 
 
+def sql(query: str) -> str:
+    """로컬 DB에 SQL 실행 (테스트 준비·정리용)"""
+    import subprocess
+
+    return subprocess.run(
+        ["docker", "exec", "supabase_db_linkedin_intelligence", "psql", "-U", "postgres", "-tA", "-v", "ON_ERROR_STOP=1", "-c", query],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+
+
 def confirm_link(email: str) -> str:
     """Mailpit API에서 인증 메일 링크 추출"""
     for _ in range(30):
@@ -298,6 +308,78 @@ def run():
             page.screenshot(path=f"{SHOTS}/settings.png", full_page=True)
 
         check("Settings 소스 로고/권한 표시 + 프로필 저장", settings)
+
+        def phase2_collection():
+            # 요구사항 6.2: 로컬 fixture 피드로 수집 → 표시·분류·이력·제한 검증 (외부 네트워크 미사용)
+            import functools
+            import http.server
+            import threading
+            from pathlib import Path
+
+            fixtures = str(Path(__file__).resolve().parent.parent / "tests" / "fixtures")
+            handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=fixtures)
+            handler.log_message = lambda *a, **k: None  # type: ignore[attr-defined]
+            server = http.server.ThreadingHTTPServer(("127.0.0.1", 8765), handler)
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+
+            active = sql(
+                "select coalesce(string_agg(id::text, ','), '') from public.data_sources "
+                "where user_id is null and is_active and source_type not in ('demo','user_provided')"
+            )
+            try:
+                if active:
+                    sql(f"update public.data_sources set is_active = false where id = any(string_to_array('{active}', ',')::uuid[])")
+                sql(
+                    "insert into public.data_sources (slug, name, source_type, source_url, homepage_url, logo_key, "
+                    "connection_status, permission_status, storage_allowed, display_allowed, retention_days, is_active) values "
+                    "('e2e-fixture', 'E2E Fixture Feed', 'rss', 'http://127.0.0.1:8765/e2e-feed.xml', 'https://fixture.example.org', "
+                    "'rss', 'connected', 'NOT_VERIFIED', true, true, 30, true)"
+                )
+                hit = "E2E fixture: Agentic AI deployment patterns"
+                miss = "E2E fixture: 오늘의 요리 레시피"
+
+                page.goto(f"{BASE}/settings")
+                page.get_by_role("button", name="지금 수집").click()
+                expect(page.get_by_text(re.compile(r"수집을 완료했습니다\. 소스 1개, 저장 1건"))).to_be_visible(timeout=60000)
+
+                # 주제와 일치한 글만 저장, 출처 로고 표시
+                page.goto(f"{BASE}/trending?period=monthly&limit=50")
+                art = page.locator("article", has=page.get_by_role("link", name=hit))
+                expect(art).to_be_visible()
+                expect(art.get_by_role("img", name="RSS 로고")).to_be_visible()
+                expect(art.get_by_text("E2E Fixture Feed")).to_be_visible()
+                expect(page.get_by_role("link", name=miss)).to_have_count(0)
+
+                # 주제 연결 (Agentic AI)
+                page.goto(f"{BASE}/topics")
+                page.get_by_role("link", name="Agentic AI", exact=True).click()
+                expect(page.get_by_role("link", name=hit)).to_be_visible()
+
+                # 수집 이력 + 10분 제한
+                page.goto(f"{BASE}/settings")
+                log = page.get_by_role("table", name="최근 수집 이력")
+                expect(log.get_by_text("E2E Fixture Feed").first).to_be_visible()
+                expect(log.get_by_text("성공").first).to_be_visible()
+                page.get_by_role("button", name="지금 수집").click()
+                expect(page.get_by_text(re.compile("10분에 한 번"))).to_be_visible()
+
+                # 사용자 RSS: http·내부 주소 거부
+                page.fill("#feed-name", "내 피드")
+                page.fill("#feed-url", "http://example.com/feed.xml")
+                page.get_by_role("button", name="피드 추가").click()
+                expect(page.get_by_text("https 로 시작하는 피드 URL만").first).to_be_visible()
+                page.fill("#feed-url", "https://127.0.0.1/feed.xml")
+                page.get_by_role("button", name="피드 추가").click()
+                expect(page.get_by_text(re.compile("허용되지 않는 주소")).first).to_be_visible()
+                expect(page.get_by_role("list", name="내 RSS 피드 목록")).to_have_count(0)
+                page.screenshot(path=f"{SHOTS}/settings-collection.png", full_page=True)
+            finally:
+                sql("delete from public.data_sources where slug = 'e2e-fixture' and user_id is null")
+                if active:
+                    sql(f"update public.data_sources set is_active = true where id = any(string_to_array('{active}', ',')::uuid[])")
+                server.shutdown()
+
+        check("Phase 2 수집: fixture 피드 → 분류·로고·이력·10분 제한·SSRF 차단", phase2_collection)
 
         def dark_mode():
             page.goto(f"{BASE}/")
