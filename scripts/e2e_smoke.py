@@ -160,6 +160,7 @@ def run():
         def nav_all():
             for href, title in [
                 ("/trending", "Trending Posts"),
+                ("/statistics", "Statistics"),
                 ("/influencers", "Influencers"),
                 ("/following", "My Following"),
                 ("/topics", "My Topics"),
@@ -426,6 +427,109 @@ def run():
             assert page.request.get(f"{BASE}/api/cron/briefing").status in (401, 503)
 
         check("Phase 3 AI: 동의·요약·주제 인사이트·브리핑·철회 (모의 AI)", phase3_ai)
+
+        def sources_stats_insights():
+            demo_title = "[DEMO] 엔터프라이즈 Agentic AI 도입 체크리스트"
+
+            # 1) 소스 on/off: DEMO DATA 를 끄면 피드에서 숨김, 다시 켜면 복원
+            page.goto(f"{BASE}/settings")
+            page.get_by_role("switch", name="DEMO DATA 끄기").click()
+            expect(page.get_by_text("'DEMO DATA'을(를) 껐습니다.", exact=False)).to_be_visible(timeout=60000)
+            page.goto(f"{BASE}/trending?period=monthly&limit=50")
+            expect(page.get_by_role("button", name=demo_title)).to_have_count(0)
+            page.goto(f"{BASE}/")
+            expect(page.get_by_role("button", name=demo_title)).to_have_count(0)
+            page.goto(f"{BASE}/settings")
+            page.get_by_role("switch", name="DEMO DATA 켜기").click()
+            expect(page.get_by_text("'DEMO DATA'을(를) 켰습니다.", exact=False)).to_be_visible(timeout=60000)
+            page.goto(f"{BASE}/trending?period=monthly&limit=50")
+            expect(page.get_by_role("button", name=demo_title).first).to_be_visible()
+
+            # 2) Statistics: 메뉴 → 통계 갱신 → 차트·출처·키워드 → 날짜 상세
+            page.goto(f"{BASE}/statistics")
+            page.get_by_role("button", name="통계 갱신").click()
+            expect(page.get_by_text(re.compile(r"통계를 갱신했습니다|10분에 한 번"))).to_be_visible(timeout=60000)
+            page.reload()
+            expect(page.get_by_role("img", name=re.compile("^일별 콘텐츠 수"))).to_be_visible()
+            expect(page.get_by_role("list", name="기간 출처별 건수")).to_be_visible()
+            expect(page.get_by_text("키워드 추이")).to_be_visible()
+            day = sql(
+                "select max(s.stat_date)::text from public.daily_stats s join public.profiles p on p.id = s.user_id "
+                f"where p.email = '{EMAIL}'"
+            )
+            assert day, "통계가 저장되지 않음"
+            page.goto(f"{BASE}/statistics?range=30&date={day}")
+            expect(page.get_by_role("list", name=f"{day} 인기 콘텐츠").get_by_role("listitem").first).to_be_visible()
+
+            # 3) 운영자 AI 허용(정책 B) → 번역·시사점(모의 AI) → 번역 토글 → 트렌드 AI 시사점 → 차단 복원
+            url = "https://techcrunch.com/e2e-agent-framework"
+            title = "OpenAI ships new agent framework for enterprises"
+            # 사전 상태 고정: 이전 실행이 중단되어 허용 상태가 남아 있어도 차단 상태에서 시작
+            src = "(select id from public.data_sources where slug = 'techcrunch-ai' and user_id is null)"
+            sql(f"update public.data_sources set ai_processing_allowed = false, external_llm_allowed = false where id = {src}")
+            sql(f"update public.content_items set ai_processing_allowed = false, external_llm_allowed = false, ai_processing_status = 'blocked' where source_id = {src} and provenance = 'collected'")
+            sql(f"delete from public.content_ai_cache where source_id = {src}")
+            uid = sql(f"select id from public.profiles where email = '{EMAIL}'")
+            sql(
+                "insert into public.content_items (user_id, source_id, title, summary, original_url, source_name, source_type, "
+                "published_at, language, content_type, keywords, provenance, permission_status, storage_allowed, display_allowed) "
+                f"select '{uid}', id, '{title}', 'A new framework for building agentic AI apps.', '{url}', name, source_type, "
+                "now() - interval '2 hours', 'en', 'article', array['agentic ai'], 'collected', 'NOT_VERIFIED', true, true "
+                "from public.data_sources where slug = 'techcrunch-ai' and user_id is null"
+            )
+            sql(
+                "insert into public.content_topics (content_id, topic_id, relevance_score) "
+                f"select c.id, t.id, 1 from public.content_items c join public.topics t on t.user_id = c.user_id and t.name = 'Agentic AI' "
+                f"where c.original_url = '{url}'"
+            )
+            try:
+                page.goto(f"{BASE}/settings")
+                page.get_by_role("switch", name="TechCrunch AI AI 번역·요약 허용").click()
+                expect(page.get_by_text(re.compile("'TechCrunch AI'의 AI 번역·요약을 허용했습니다"))).to_be_visible(timeout=60000)
+                assert sql(f"select provider || ':' || is_demo::text from public.content_ai_cache where original_url = '{url}'") == "mock:true"
+
+                page.goto(f"{BASE}/trending?period=weekly&limit=50")
+                card = page.locator("article", has=page.get_by_text(f"원문: {title}"))
+                expect(card.get_by_role("button", name=f"[DEMO 번역] {title}")).to_be_visible()
+                expect(card.get_by_text("DEMO 번역", exact=True)).to_be_visible()
+                expect(card.get_by_text("시사점", exact=True)).to_be_visible()
+                expect(card.get_by_role("link", name="Agentic AI", exact=True)).to_be_visible()
+
+                # 번역 끄기 → 원문 제목
+                page.get_by_role("switch", name="한국어로 보기").click()
+                page.wait_for_timeout(800)
+                page.reload()
+                expect(page.get_by_role("button", name=title, exact=True)).to_be_visible()
+                expect(page.get_by_text(f"원문: {title}")).to_have_count(0)
+                page.get_by_role("switch", name="한국어로 보기").click()
+                page.wait_for_timeout(800)
+                assert sql(f"select translate_ko::text from public.profiles where email = '{EMAIL}'") == "true"
+
+                # 트렌드 시사점 패널: 집계 + AI(허용 콘텐츠만)
+                page.reload()
+                expect(page.get_by_text("급상승 키워드")).to_be_visible()
+                page.get_by_role("button", name="AI 시사점 생성").click()
+                expect(page.get_by_text(re.compile(r"트렌드 시사점을 생성했습니다 \(콘텐츠 1건 분석\)"))).to_be_visible(timeout=60000)
+                expect(page.get_by_text(re.compile(r"^\[DEMO\] 인기 콘텐츠 1건 기반"))).to_be_visible()
+                page.screenshot(path=f"{SHOTS}/trending-insights.png", full_page=True)
+            finally:
+                # 차단 복원 → 번역·시사점 삭제
+                page.goto(f"{BASE}/settings")
+                sw = page.get_by_role("switch", name="TechCrunch AI AI 번역·요약 차단")
+                try:
+                    sw.wait_for(timeout=10000)
+                    sw.click()
+                    expect(page.get_by_text(re.compile("'TechCrunch AI'의 AI 처리를 차단하고"))).to_be_visible(timeout=60000)
+                except Exception:
+                    # UI 정리에 실패해도 공유 로컬 DB 상태는 반드시 원복
+                    sql(f"update public.data_sources set ai_processing_allowed = false, external_llm_allowed = false where id = {src}")
+                    sql(f"update public.content_items set ai_processing_allowed = false, external_llm_allowed = false, ai_processing_status = 'blocked' where source_id = {src} and provenance = 'collected'")
+                    sql(f"delete from public.content_ai_cache where source_id = {src}")
+                    raise
+            assert sql(f"select count(*) from public.content_ai_cache where original_url = '{url}'") == "0"
+            assert sql("select ai_processing_allowed::text from public.data_sources where slug = 'techcrunch-ai' and user_id is null") == "false"
+
+        check("소스 on/off·Statistics·운영자 AI 허용·번역 토글·트렌드 시사점", sources_stats_insights)
 
         def global_search():
             page.goto(f"{BASE}/")

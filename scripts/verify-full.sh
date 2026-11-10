@@ -34,7 +34,8 @@ if curl -s -o /dev/null -m 3 "$APP_URL/login"; then
   exit 1
 fi
 echo "프로덕션 빌드를 모의 AI 모드로 기동합니다 (AI_PROVIDER=mock next start)."
-AI_PROVIDER=mock npx next start -p 3000 >/tmp/lih-verify-server.log 2>&1 &
+# ADMIN_EMAILS=@test.local : E2E 계정(임의 @test.local)을 운영자로 취급해 출처 AI 허용 흐름을 검증
+AI_PROVIDER=mock ADMIN_EMAILS=@test.local npx next start -p 3000 >/tmp/lih-verify-server.log 2>&1 &
 STARTED_PID=$!
 for _ in $(seq 1 60); do
   curl -s -o /dev/null -m 2 "$APP_URL/login" && break

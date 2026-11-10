@@ -1,6 +1,6 @@
 // 모의 AI (순수 모듈): 키가 없는 로컬·테스트·CI 용. 결과는 DEMO 로 표시된다.
 // 입력 텍스트만으로 결정적으로 생성하며 외부로 아무것도 보내지 않는다.
-import type { BriefingInsight, ContentInsight, TopicInsight } from "./schemas.ts";
+import type { BatchMeta, BriefingInsight, ContentInsight, TopicInsight } from "./schemas.ts";
 import type { PromptContent } from "./prompts.ts";
 
 export const MOCK_MODEL = "mock-demo";
@@ -43,6 +43,28 @@ export function mockBriefingInsight(items: PromptContent[]): BriefingInsight {
     insights: items.slice(0, 3).map((c, i) => ({
       title: `[DEMO] ${short(c.title, 50)}`,
       detail: "[DEMO] 모의 AI 가 만든 예시 인사이트입니다. 실제 분석 결과가 아닙니다.",
+      content_refs: [i + 1],
+    })),
+  };
+}
+
+export function mockBatchMeta(items: (PromptContent & { language: string })[]): BatchMeta {
+  return {
+    items: items.map((c, i) => ({
+      n: i + 1,
+      title_ko: c.language === "ko" ? "" : `[DEMO 번역] ${short(c.title, 80)}`,
+      summary_ko: c.language === "ko" || !c.summary ? "" : "[DEMO 번역] 모의 AI 번역 예시입니다.",
+      implication_ko: "[DEMO] 모의 AI 한 줄 시사점 예시입니다.",
+    })),
+  };
+}
+
+export function mockTrendInsight(items: PromptContent[]): BriefingInsight {
+  return {
+    headline: `[DEMO] 인기 콘텐츠 ${items.length}건 기반 모의 트렌드 시사점`,
+    insights: items.slice(0, 3).map((c, i) => ({
+      title: `[DEMO] ${short(c.title, 50)} 관련 흐름`,
+      detail: "[DEMO] 모의 AI 가 만든 예시 시사점입니다. 실제 분석 결과가 아닙니다.",
       content_refs: [i + 1],
     })),
   };

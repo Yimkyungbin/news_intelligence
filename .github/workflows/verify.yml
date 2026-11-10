@@ -38,8 +38,15 @@ jobs:
       - name: 의존성 설치
         run: npm ci
 
-      - name: 로컬 Supabase 시작
-        run: npx supabase start -x studio,imgproxy,edge-runtime,logflare,vector,realtime,storage-api,postgres-meta,supavisor
+      - name: 로컬 Supabase 시작 (러너 네트워크 일시 오류 대비 최대 3회 시도)
+        run: |
+          for i in 1 2 3; do
+            npx supabase start -x studio,imgproxy,edge-runtime,logflare,vector,realtime,storage-api,postgres-meta,supavisor && exit 0
+            echo "Supabase 시작 실패 ($i/3), 정리 후 재시도"
+            npx supabase stop --no-backup || true
+            sleep 10
+          done
+          exit 1
 
       - name: .env.local 생성 (로컬 Supabase 기본 키, 운영 비밀값 아님)
         run: |

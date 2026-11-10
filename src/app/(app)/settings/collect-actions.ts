@@ -5,7 +5,10 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { authedClient } from "@/lib/auth";
 import { runCollection } from "@/lib/collectors/pipeline";
-import { FetchError, safeFetch } from "@/lib/collectors/http";
+import { refreshDailyStats } from "@/lib/stats/service";
+import { processSystemAI } from "@/lib/ai/system";
+import { FetchError, fetchJson, safeFetch } from "@/lib/collectors/http";
+import { blueskyHandleFromUrl, parseBlueskyFeed } from "@/lib/collectors/sources";
 import { parseFeed } from "@/lib/collectors/rss";
 import { failure, httpUrl, text } from "@/lib/validation";
 import type { ActionState } from "@/lib/types";
@@ -36,6 +39,8 @@ export async function collectNow(): Promise<ActionState> {
 
   try {
     const summary = await runCollection({ userId, trigger: "manual" });
+    await refreshDailyStats(userId, 3);
+    await processSystemAI({ maxItems: 30 });
     revalidatePath("/", "layout");
     const stored = summary.sources.reduce((n, s) => n + s.stored, 0);
     const failed = summary.sources.filter((s) => s.status === "failed").length;
@@ -65,8 +70,14 @@ export async function addUserFeed(_: ActionState, fd: FormData): Promise<ActionS
   if ((count ?? 0) >= MAX_USER_FEEDS) return failure(`피드는 최대 ${MAX_USER_FEEDS}개까지 등록할 수 있습니다.`, fd);
 
   try {
-    const { text: body } = await safeFetch(parsed.data.url, { untrusted: true, accept: "application/rss+xml, application/atom+xml, application/xml, text/xml" });
-    if (parseFeed(body).length === 0) return failure("피드에 항목이 없습니다.", fd);
+    const handle = blueskyHandleFromUrl(parsed.data.url);
+    if (handle) {
+      // Bluesky 프로필: 공개 API(고정 호스트)로 확인
+      parseBlueskyFeed(await fetchJson(`https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor=${encodeURIComponent(handle)}&limit=5`));
+    } else {
+      const { text: body } = await safeFetch(parsed.data.url, { untrusted: true, accept: "application/rss+xml, application/atom+xml, application/xml, text/xml" });
+      if (parseFeed(body).length === 0) return failure("피드에 항목이 없습니다.", fd);
+    }
   } catch (e) {
     const reason = e instanceof FetchError ? e.message : "RSS 또는 Atom 피드를 읽을 수 없습니다.";
     return failure(`피드를 확인하지 못했습니다: ${reason}`, fd);

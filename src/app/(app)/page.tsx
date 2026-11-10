@@ -2,7 +2,8 @@ import Link from "next/link";
 import { ArrowRight, Brain, CalendarDays, FileText, Hash, Sparkles, UserCheck } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { countContent, getSavedContentIds, listContent } from "@/lib/queries";
+import { countContent, getAIMeta, getSavedContentIds, getTranslatePref, listContent } from "@/lib/queries";
+import { getDisabledSourceIds } from "@/lib/source-settings";
 import { dailyBuckets, rankContent, topKeywords } from "@/lib/content";
 import { resolveSourceLogo } from "@/lib/sources/registry";
 import { daysAgoIso, formatDate, formatDateTime, startOfTodayKstIso } from "@/lib/utils";
@@ -15,7 +16,8 @@ import { BriefingSummary } from "@/components/briefing/briefing-view";
 import { GenerateBriefingButton } from "@/components/briefing/ai-buttons";
 import type { BriefingContent } from "@/lib/briefing/compose";
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState } from "@/components/ui/primitives";
-import type { ContentItem } from "@/lib/types";
+import type { ContentAIMeta, ContentItem } from "@/lib/types";
+import { TranslateToggle } from "@/components/content/translate-toggle";
 
 export const metadata = { title: "Dashboard" };
 // 브리핑 수동 생성(Server Action) 실행 시간 상한
@@ -119,6 +121,8 @@ function TopList({
   scope,
   href,
   align,
+  meta,
+  translate,
 }: {
   title: string;
   items: ContentItem[];
@@ -128,6 +132,8 @@ function TopList({
   scope: string;
   href: string;
   align?: "left" | "right";
+  meta: Map<string, ContentAIMeta>;
+  translate: boolean;
 }) {
   return (
     <Card>
@@ -147,7 +153,7 @@ function TopList({
           <EmptyState title="해당 기간 콘텐츠가 없습니다" description="Settings에서 '지금 수집'을 실행하거나 다음 자동 수집(06:00 KST)을 기다려 주세요." />
         ) : (
           items.map((it, idx) => (
-            <ContentCard key={it.id} item={it} saved={saved.has(it.id)} rank={idx + 1} rankNote={notes[it.id]} compact />
+            <ContentCard key={it.id} item={it} saved={saved.has(it.id)} rank={idx + 1} rankNote={notes[it.id]} ai={meta.get(it.original_url)} translate={translate} compact />
           ))
         )}
       </CardContent>
@@ -169,7 +175,7 @@ export default async function DashboardPage() {
     supabase
       .from("topics")
       .select(
-        "id,name,priority,content_topics(content:content_items!inner(id,title,original_url,published_at,collected_at,provenance,source_name,source:data_sources(logo_key,homepage_url,brand_color)))",
+        "id,name,priority,content_topics(content:content_items!inner(id,source_id,title,original_url,published_at,collected_at,provenance,source_name,source:data_sources(logo_key,homepage_url,brand_color)))",
       )
       .eq("user_id", user.id)
       .eq("is_active", true)
@@ -199,14 +205,17 @@ export default async function DashboardPage() {
       .limit(4),
   ]);
 
+  const disabledSources = new Set(await getDisabledSourceIds(user.id));
   const dayIso = daysAgoIso(1);
   const daily = rankContent(weekItems.filter((i) => (i.published_at ?? i.collected_at) >= dayIso), 10);
   const weekly = rankContent(weekItems, 10);
   const keywords = topKeywords(weekItems);
+  const [meta, translate] = await Promise.all([getAIMeta([...daily.items, ...weekly.items].map((i) => i.original_url)), getTranslatePref(user.id)]);
 
   // 주제별 최근 7일 업데이트 (펼치기용 최신 5건 포함)
   type TopicContent = {
     id: string;
+    source_id: string | null;
     title: string;
     original_url: string;
     published_at: string | null;
@@ -219,7 +228,7 @@ export default async function DashboardPage() {
   const topics: TopicUpdate[] = ((topicsRes.data ?? []) as unknown as TopicRow[]).map((t) => {
     const recent = t.content_topics
       .map((ct) => ct.content)
-      .filter((c) => (c.published_at ?? c.collected_at) >= weekIso)
+      .filter((c) => (c.published_at ?? c.collected_at) >= weekIso && !(c.source_id && disabledSources.has(c.source_id)))
       .sort((a, b) => (b.published_at ?? b.collected_at).localeCompare(a.published_at ?? a.collected_at));
     return {
       id: t.id,
@@ -268,11 +277,14 @@ export default async function DashboardPage() {
           <h1 className="mt-1 text-xl font-semibold tracking-tight">안녕하세요, {user.name}님</h1>
           <p className="mt-1 text-xs text-muted-foreground">각 항목 제목 옆 ⓘ 를 누르면 설명을, 콘텐츠 제목을 누르면 상세 내용을 볼 수 있습니다.</p>
         </div>
-        {hasDemo ? (
-          <Badge variant="demo" className="text-xs">
-            일부 콘텐츠는 DEMO DATA입니다 · 실제 수집 데이터 아님
-          </Badge>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {hasDemo ? (
+            <Badge variant="demo" className="text-xs">
+              일부 콘텐츠는 DEMO DATA입니다 · 실제 수집 데이터 아님
+            </Badge>
+          ) : null}
+          <TranslateToggle on={translate} />
+        </div>
       </div>
 
       <section aria-label="요약 지표" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -376,6 +388,8 @@ export default async function DashboardPage() {
           saved={saved}
           scope="내 수집 콘텐츠 · 최근 24시간"
           href="/trending?period=daily&limit=10"
+          meta={meta}
+          translate={translate}
         />
         <TopList
           title="Weekly Top 10"
@@ -386,6 +400,8 @@ export default async function DashboardPage() {
           scope="내 수집 콘텐츠 · 최근 7일"
           href="/trending?period=weekly&limit=10"
           align="right"
+          meta={meta}
+          translate={translate}
         />
       </div>
 

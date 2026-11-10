@@ -45,6 +45,21 @@ export const briefingInsightSchema = z.object({
 });
 export type BriefingInsight = z.infer<typeof briefingInsightSchema>;
 
+/* ---------- 일괄 번역·한 줄 시사점 (번역 토글·Trending 카드) ---------- */
+export const batchMetaSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        n: z.number().int().min(1).max(20),
+        title_ko: z.string().trim().max(400),
+        summary_ko: z.string().trim().max(1200),
+        implication_ko: z.string().trim().max(200),
+      }),
+    )
+    .max(20),
+});
+export type BatchMeta = z.infer<typeof batchMetaSchema>;
+
 /* ---------- OpenAI 용 JSON Schema (strict: 모든 필드 required, additionalProperties false) ---------- */
 const str = { type: "string" } as const;
 const strArr = { type: "array", items: str } as const;
@@ -78,6 +93,9 @@ export const JSON_SCHEMAS = {
     headline: str,
     insights: { type: "array", items: obj({ title: str, detail: str, content_refs: refs }) },
   }),
+  batch_meta: obj({
+    items: { type: "array", items: obj({ n: { type: "integer" }, title_ko: str, summary_ko: str, implication_ko: str }) },
+  }),
 } as const;
 
 export type AITaskName = keyof typeof JSON_SCHEMAS;
@@ -85,4 +103,5 @@ export const TASK_SCHEMAS = {
   content_insight: contentInsightSchema,
   topic_insight: topicInsightSchema,
   briefing_insight: briefingInsightSchema,
+  batch_meta: batchMetaSchema,
 } as const;

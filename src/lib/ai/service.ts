@@ -4,6 +4,7 @@ import { startOfTodayKstIso } from "@/lib/utils";
 import { checkAIPermission, filterAIAllowed } from "./gate";
 import { AIError } from "./openai";
 import { getProvider, type AIProvider } from "./provider";
+import { disabledSourceIdsFor } from "@/lib/source-settings";
 
 /**
  * AI 작업 서비스 (서버 전용, service role)
@@ -117,6 +118,7 @@ export async function processPending(userId: string, limit = 10): Promise<number
     .eq("user_id", userId)
     .eq("ai_processing_allowed", true)
     .eq("ai_processing_status", "pending")
+    .eq("provenance", "user_provided")
     .order("collected_at", { ascending: false })
     .limit(limit);
   let done = 0;
@@ -166,13 +168,14 @@ export async function generateTopicInsight(userId: string, topicId: string, prov
   const since = new Date(Date.now() - TOPIC_WINDOW_DAYS * 86400000).toISOString();
   const { data: rows } = await db
     .from("content_topics")
-    .select("content:content_items!inner(id,user_id,title,summary,source_name,content_type,published_at,collected_at,provenance,ai_processing_allowed,external_llm_allowed)")
+    .select("content:content_items!inner(id,user_id,source_id,title,summary,source_name,content_type,published_at,collected_at,provenance,ai_processing_allowed,external_llm_allowed)")
     .eq("topic_id", topicId)
     .eq("content.user_id", userId)
     .gte("content.collected_at", since)
     .limit(200);
   type C = {
     id: string;
+    source_id: string | null;
     title: string;
     summary: string | null;
     source_name: string;
@@ -183,7 +186,8 @@ export async function generateTopicInsight(userId: string, topicId: string, prov
     ai_processing_allowed: boolean;
     external_llm_allowed: boolean;
   };
-  const all = ((rows ?? []) as unknown as { content: C }[]).map((r) => r.content);
+  const disabled = new Set(await disabledSourceIdsFor(db, userId));
+  const all = ((rows ?? []) as unknown as { content: C }[]).map((r) => r.content).filter((c) => !(c.source_id && disabled.has(c.source_id)));
   const allowed = filterAIAllowed(all, p.external)
     .sort((a, b) => (b.published_at ?? b.collected_at).localeCompare(a.published_at ?? a.collected_at))
     .slice(0, 30);

@@ -5,6 +5,8 @@ import { z } from "zod";
 import { authedClient } from "@/lib/auth";
 import { generateTopicInsight, setUserContentAIConsent, summarizeContent } from "@/lib/ai/service";
 import { generateBriefing } from "@/lib/briefing/service";
+import { generateTrendInsight } from "@/lib/trends/service";
+import { parseTrendParams } from "@/lib/trends/params";
 import type { ActionState } from "@/lib/types";
 
 const uuid = z.uuid();
@@ -57,4 +59,15 @@ export async function generateBriefingNow(): Promise<ActionState> {
   const res = await generateBriefing(userId, { trigger: "manual" });
   if (res.ok) revalidatePath("/", "layout");
   return { ok: res.ok, message: res.message };
+}
+
+/** Trending 조건별 AI 트렌드 시사점 (요구사항 4.3·4.4). 인자는 서버에서 다시 정규화 */
+export async function generateTrendIntelligence(raw: Record<string, unknown>): Promise<ActionState> {
+  const { supabase, userId } = await authedClient();
+  const { data: topics } = await supabase.from("topics").select("id,name").eq("user_id", userId);
+  const params = parseTrendParams(raw ?? {}, (topics ?? []).map((t) => t.id as string));
+  const topicName = (topics ?? []).find((t) => t.id === params.topic)?.name as string | undefined;
+  const res = await generateTrendInsight(userId, params, topicName);
+  if (res.ok) revalidatePath("/trending");
+  return res;
 }

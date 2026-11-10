@@ -41,6 +41,8 @@ export type ContentDetail = {
   } | null;
   topics: { id: string; name: string; relevance: number }[];
   saved: { notes: string | null; tags: string[] } | null;
+  /** 출처 AI 허용 시 번역·한 줄 시사점 */
+  ai_meta: { title_ko: string | null; summary_ko: string | null; implication_ko: string | null; is_demo: boolean; model_name: string } | null;
   insight: {
     summary: string | null;
     key_points: string[];
@@ -60,7 +62,7 @@ const SELECT =
   "saved_posts(notes,tags)," +
   "ai_insights(summary,key_points,keywords,insights,model_name,provider,is_demo,processed_at)";
 
-type Row = Omit<ContentDetail, "topics" | "saved" | "insight"> & {
+type Row = Omit<ContentDetail, "topics" | "saved" | "insight" | "ai_meta"> & {
   content_topics: { relevance_score: number; topic: { id: string; name: string } | null }[];
   saved_posts: { notes: string | null; tags: string[] }[];
   ai_insights: NonNullable<ContentDetail["insight"]>[];
@@ -81,10 +83,15 @@ export async function getContentDetail(contentId: string): Promise<{ ok: true; d
   // AI 요약은 처리 권한이 허용된 경우에만 노출
   const insight = rest.ai_processing_allowed ? (ai_insights.sort((a, b) => b.processed_at.localeCompare(a.processed_at))[0] ?? null) : null;
 
+  const { data: meta } = rest.ai_processing_allowed
+    ? await supabase.from("content_ai_cache").select("title_ko,summary_ko,implication_ko,is_demo,model_name").eq("original_url", rest.original_url).maybeSingle()
+    : { data: null };
+
   return {
     ok: true,
     detail: {
       ...rest,
+      ai_meta: meta ?? null,
       keywords: normalizeKeywords(rest.keywords, 15),
       topics: content_topics
         .filter((ct) => ct.topic)

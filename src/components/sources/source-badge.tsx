@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 const TYPE_LABEL: Record<string, string> = {
   linkedin_api: "LinkedIn API",
   official_blog: "공식 블로그",
+  news: "IT 뉴스",
   rss: "RSS",
   public_api: "공개 API",
   social_api: "소셜 API",

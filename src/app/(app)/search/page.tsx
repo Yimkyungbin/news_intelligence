@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getSavedContentIds } from "@/lib/queries";
 import { CONTENT_SELECT, type ContentItem } from "@/lib/types";
+import { getDisabledSourceIds, hiddenSourceFilter } from "@/lib/source-settings";
 import { ContentCard } from "@/components/content/content-card";
 import { Badge, EmptyState, PageHeader } from "@/components/ui/primitives";
 
@@ -26,8 +27,11 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
 
   const supabase = await createClient();
   const like = `%${term}%`;
+  const hidden = hiddenSourceFilter(await getDisabledSourceIds(user.id));
+  let contentQuery = supabase.from("content_items").select(CONTENT_SELECT).eq("user_id", user.id).or(`title.ilike.${like},summary.ilike.${like},author.ilike.${like}`).limit(30);
+  if (hidden) contentQuery = contentQuery.or(hidden);
   const [contents, topics, people, saved] = await Promise.all([
-    supabase.from("content_items").select(CONTENT_SELECT).eq("user_id", user.id).or(`title.ilike.${like},summary.ilike.${like},author.ilike.${like}`).limit(30),
+    contentQuery,
     supabase.from("topics").select("id,name,description").eq("user_id", user.id).ilike("name", like).limit(10),
     supabase.from("influencers").select("id,name,company,is_following").eq("user_id", user.id).or(`name.ilike.${like},company.ilike.${like}`).limit(10),
     getSavedContentIds(user.id),

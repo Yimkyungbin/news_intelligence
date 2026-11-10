@@ -41,7 +41,7 @@ export function AddFeedForm() {
         <Input id="feed-name" name="name" required maxLength={100} placeholder="예: 개인 기술 블로그" defaultValue={pickValue(v, "name", "")} />
         <FieldError errors={state?.errors} name="name" />
       </Field>
-      <Field label="RSS / Atom URL" htmlFor="feed-url" hint="https 피드만 등록할 수 있으며, 등록 전에 피드를 한 번 읽어 확인합니다.">
+      <Field label="피드 URL (RSS·Atom·Mastodon·Bluesky)" htmlFor="feed-url" hint="https 피드만 등록합니다. 블로그 RSS·Atom, Mastodon 프로필(https://mastodon.social/@아이디.rss), Bluesky 프로필(https://bsky.app/profile/핸들)을 지원하며 등록 전에 한 번 읽어 확인합니다.">
         <Input id="feed-url" name="url" type="url" required placeholder="https://example.com/feed.xml" defaultValue={pickValue(v, "url", "")} />
         <FieldError errors={state?.errors} name="url" />
       </Field>

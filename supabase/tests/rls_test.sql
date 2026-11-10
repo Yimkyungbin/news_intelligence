@@ -40,7 +40,8 @@ begin
 
   -- 2) 시스템 소스 카탈로그는 읽기 가능, 수정 불가
   select count(*) into n from public.data_sources where user_id is null;
-  assert n = 17, format('system sources expected 17, got %s', n);
+  -- 소스가 추가될 수 있으므로 최소 개수로 확인 (Phase 1: 17 + 확대: 22 = 39)
+  assert n >= 39, format('system sources expected >= 39, got %s', n);
   update public.data_sources set ai_processing_allowed = true where slug = 'linkedin-api';
   get diagnostics n = row_count;
   assert n = 0, 'A must not update system source';
@@ -167,6 +168,81 @@ begin
   select count(*) into n from public.profiles where id = '00000000-0000-0000-0000-00000000000a' and ai_model = 'gpt-6-luna';
   assert n = 1, 'default ai_model should be gpt-6-luna';
   raise notice 'PASS ai_model: default gpt-6-luna, unsupported values rejected';
+
+  -- ===== 소스 관리·통계·번역 =====
+  -- 16) 소스 on/off: 본인 설정만, 직접 입력·LinkedIn 소스는 대상 아님
+  insert into public.user_source_settings (user_id, source_id, enabled)
+    select '00000000-0000-0000-0000-00000000000a', id, false from public.data_sources where slug = 'github' and user_id is null;
+  select count(*) into n from public.user_source_settings where user_id = '00000000-0000-0000-0000-00000000000a';
+  assert n = 1, 'A can store own source setting';
+  begin
+    insert into public.user_source_settings (user_id, source_id, enabled)
+      select '00000000-0000-0000-0000-00000000000a', id, false from public.data_sources where slug = 'user-provided';
+    raise exception 'SHOULD_NOT_REACH';
+  exception when others then
+    assert sqlerrm <> 'SHOULD_NOT_REACH', 'user-provided source must not be toggled';
+  end;
+  begin
+    insert into public.user_source_settings (user_id, source_id, enabled)
+      select '00000000-0000-0000-0000-00000000000b', id, false from public.data_sources where slug = 'arxiv';
+    raise exception 'SHOULD_NOT_REACH';
+  exception when others then
+    assert sqlerrm <> 'SHOULD_NOT_REACH', 'A must not write B source settings';
+  end;
+  raise notice 'PASS source settings: own only, non-toggleable sources rejected';
+
+  -- 17) 통계·번역 캐시·트렌드 시사점: 클라이언트 쓰기 불가
+  begin
+    insert into public.daily_stats (user_id, stat_date, data) values ('00000000-0000-0000-0000-00000000000a', current_date, '{}');
+    raise exception 'SHOULD_NOT_REACH';
+  exception when others then
+    assert sqlerrm <> 'SHOULD_NOT_REACH', 'client must not write daily_stats';
+  end;
+  begin
+    insert into public.content_ai_cache (original_url, source_language, title_ko, model_name, provider)
+      values ('https://x.example/forged', 'en', '위조', 'x', 'openai');
+    raise exception 'SHOULD_NOT_REACH';
+  exception when others then
+    assert sqlerrm <> 'SHOULD_NOT_REACH', 'client must not write content_ai_cache';
+  end;
+  begin
+    insert into public.trend_insights (user_id, cache_key, content, model_name, provider)
+      values ('00000000-0000-0000-0000-00000000000a', 'k', '{}', 'x', 'openai');
+    raise exception 'SHOULD_NOT_REACH';
+  exception when others then
+    assert sqlerrm <> 'SHOULD_NOT_REACH', 'client must not write trend_insights';
+  end;
+  begin
+    perform public.purge_old_stats();
+    raise exception 'SHOULD_NOT_REACH';
+  exception when others then
+    assert sqlerrm <> 'SHOULD_NOT_REACH', 'client must not call purge_old_stats';
+  end;
+  raise notice 'PASS stats/cache/trend: clients cannot write';
+end $$;
+
+-- 18) 통계·트렌드 시사점·소스 설정은 본인 것만 조회, 번역 캐시는 공유 조회
+reset role;
+insert into public.daily_stats (user_id, stat_date, data) values ('00000000-0000-0000-0000-00000000000b', current_date, '{"total":1}');
+insert into public.trend_insights (id, user_id, cache_key, content, model_name, provider)
+  values ('00000000-0000-0000-0000-0000000000e1', '00000000-0000-0000-0000-00000000000b', 'k', '{}', 'm', 'mock');
+insert into public.user_source_settings (user_id, source_id, enabled)
+  select '00000000-0000-0000-0000-00000000000b', id, false from public.data_sources where slug = 'arxiv' and user_id is null;
+insert into public.content_ai_cache (original_url, source_language, title_ko, model_name, provider)
+  values ('https://x.example/shared', 'en', '공유 번역', 'm', 'mock');
+set local role authenticated;
+do $$
+declare n int;
+begin
+  select count(*) into n from public.daily_stats where user_id = '00000000-0000-0000-0000-00000000000b';
+  assert n = 0, 'A must not see B daily_stats';
+  select count(*) into n from public.trend_insights where id = '00000000-0000-0000-0000-0000000000e1';
+  assert n = 0, 'A must not see B trend insights';
+  select count(*) into n from public.user_source_settings where user_id = '00000000-0000-0000-0000-00000000000b';
+  assert n = 0, 'A must not see B source settings';
+  select count(*) into n from public.content_ai_cache where original_url = 'https://x.example/shared';
+  assert n = 1, 'translation cache is readable by signed-in users';
+  raise notice 'PASS isolation: stats, trend insights, source settings; shared translation cache readable';
 end $$;
 
 -- 15) 주제 인사이트·브리핑은 본인 것만 조회

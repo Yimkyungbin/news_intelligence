@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { CONTENT_SELECT, type ContentItem } from "@/lib/types";
+import { CONTENT_SELECT, type ContentAIMeta, type ContentItem } from "@/lib/types";
+import { getDisabledSourceIds, hiddenSourceFilter } from "@/lib/source-settings";
 
 /**
  * 모든 쿼리는 사용자 세션 클라이언트로 실행되며 RLS가 user_id 범위를 강제한다.
@@ -32,6 +33,9 @@ export async function listContent(
     const since = new Date(opts.sinceIso).toISOString();
     q = q.or(`published_at.gte.${since},and(published_at.is.null,collected_at.gte.${since})`);
   }
+  // 사용자가 끈 소스 숨김 (여러 or 조건은 AND 로 결합됨)
+  const hidden = hiddenSourceFilter(await getDisabledSourceIds(userId));
+  if (hidden) q = q.or(hidden);
   if (opts.topicId) q = q.eq("content_topics.topic_id", opts.topicId);
   if (opts.contentType) q = q.eq("content_type", opts.contentType);
   if (opts.language) q = q.eq("language", opts.language);
@@ -44,6 +48,33 @@ export async function countContent(userId: string, sinceIso?: string) {
   const supabase = await createClient();
   let q = supabase.from("content_items").select("id", { count: "exact", head: true }).eq("user_id", userId);
   if (sinceIso) q = q.gte("collected_at", sinceIso);
+  const hidden = hiddenSourceFilter(await getDisabledSourceIds(userId));
+  if (hidden) q = q.or(hidden);
   const { count } = await q;
   return count ?? 0;
+}
+
+/** 번역·한 줄 시사점 일괄 조회 (URL 기준 공유 캐시) */
+export async function getAIMeta(urls: string[]): Promise<Map<string, ContentAIMeta>> {
+  const out = new Map<string, ContentAIMeta>();
+  const uniq = [...new Set(urls)];
+  if (uniq.length === 0) return out;
+  const supabase = await createClient();
+  for (let i = 0; i < uniq.length; i += 200) {
+    const { data } = await supabase
+      .from("content_ai_cache")
+      .select("original_url,title_ko,summary_ko,implication_ko,is_demo")
+      .in("original_url", uniq.slice(i, i + 200));
+    for (const r of data ?? []) {
+      out.set(r.original_url as string, { title_ko: r.title_ko, summary_ko: r.summary_ko, implication_ko: r.implication_ko, is_demo: r.is_demo });
+    }
+  }
+  return out;
+}
+
+/** 사용자 "한국어로 보기" 설정 (기본 켜짐) */
+export async function getTranslatePref(userId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("profiles").select("translate_ko").eq("id", userId).maybeSingle();
+  return data?.translate_ko ?? true;
 }

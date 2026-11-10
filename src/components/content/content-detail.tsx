@@ -124,6 +124,21 @@ function DetailBody({ d, onNavigate, onRefresh }: { d: ContentDetail; onNavigate
         )}
       </Section>
 
+      {d.ai_meta && (d.ai_meta.title_ko || d.ai_meta.summary_ko || d.ai_meta.implication_ko) ? (
+        <Section title={`한국어 번역·시사점 (AI${d.ai_meta.is_demo ? " · DEMO" : ""})`}>
+          <div className="flex flex-col gap-1.5 rounded-md border bg-amber-500/5 p-3 text-sm">
+            {d.ai_meta.title_ko ? <p className="font-medium">{d.ai_meta.title_ko}</p> : null}
+            {d.ai_meta.summary_ko ? <p className="leading-relaxed text-muted-foreground">{d.ai_meta.summary_ko}</p> : null}
+            {d.ai_meta.implication_ko ? (
+              <p>
+                <span className="font-semibold">시사점</span> {d.ai_meta.implication_ko}
+              </p>
+            ) : null}
+            <p className="text-[11px] text-muted-foreground">{d.ai_meta.model_name} · 운영자가 허용한 출처의 제목·요약만 AI로 처리했습니다.</p>
+          </div>
+        </Section>
+      ) : null}
+
       <ContentAISection d={d} onChanged={onRefresh} />
 
       {metrics.length ? (

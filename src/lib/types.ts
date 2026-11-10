@@ -81,12 +81,18 @@ export type ContentItem = {
   provenance: "demo" | "collected" | "user_provided" | "linkedin_api";
   permission_status: PermissionStatus;
   ai_processing_allowed: boolean;
+  external_llm_allowed: boolean;
   ai_processing_status: string;
   source: Pick<DataSource, "slug" | "logo_key" | "homepage_url" | "brand_color"> | null;
+  /** 연결된 관심 주제 (별칭 조인, 주제 필터용 content_topics!inner 와 구분) */
+  topic_links?: { relevance_score: number; topic: { id: string; name: string } | null }[];
 };
 
+/** 번역·한 줄 시사점 (content_ai_cache) */
+export type ContentAIMeta = { title_ko: string | null; summary_ko: string | null; implication_ko: string | null; is_demo: boolean };
+
 export const CONTENT_SELECT =
-  "id,title,summary,original_url,author,author_title,author_company,source_name,source_type,published_at,collected_at,language,content_type,keywords,popularity,provenance,permission_status,ai_processing_allowed,ai_processing_status,source:data_sources(slug,logo_key,homepage_url,brand_color)";
+  "id,title,summary,original_url,author,author_title,author_company,source_name,source_type,published_at,collected_at,language,content_type,keywords,popularity,provenance,permission_status,ai_processing_allowed,external_llm_allowed,ai_processing_status,source:data_sources(slug,logo_key,homepage_url,brand_color),topic_links:content_topics(relevance_score,topic:topics(id,name))";
 
 export type SavedPost = {
   id: string;
