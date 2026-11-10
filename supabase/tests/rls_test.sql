@@ -142,17 +142,18 @@ end $$;
 
 -- 12) 시스템 작업(cron) 이력은 모든 사용자가 조회 가능, 다른 사용자의 수동 작업 이력은 불가
 reset role;
-insert into public.collection_logs (user_id, source_id, status)
-  select null, id, 'success' from public.data_sources where slug = 'hacker-news' and user_id is null;
-insert into public.collection_logs (user_id, source_id, status)
-  select '00000000-0000-0000-0000-00000000000b', id, 'success' from public.data_sources where slug = 'hacker-news' and user_id is null;
+-- 기존 수집 이력이 있는 DB에서도 동작하도록, 테스트가 넣은 고정 id 로만 판단
+insert into public.collection_logs (id, user_id, source_id, status)
+  select '00000000-0000-0000-0000-0000000000c1', null, id, 'success' from public.data_sources where slug = 'hacker-news' and user_id is null;
+insert into public.collection_logs (id, user_id, source_id, status)
+  select '00000000-0000-0000-0000-0000000000c2', '00000000-0000-0000-0000-00000000000b', id, 'success' from public.data_sources where slug = 'hacker-news' and user_id is null;
 set local role authenticated;
 do $$
 declare n int;
 begin
-  select count(*) into n from public.collection_logs where user_id is null;
-  assert n = 1, format('A should see system logs, got %s', n);
-  select count(*) into n from public.collection_logs where user_id = '00000000-0000-0000-0000-00000000000b';
+  select count(*) into n from public.collection_logs where id = '00000000-0000-0000-0000-0000000000c1';
+  assert n = 1, 'A should see system (cron) logs';
+  select count(*) into n from public.collection_logs where id = '00000000-0000-0000-0000-0000000000c2';
   assert n = 0, 'A must not see B manual logs';
   raise notice 'PASS collection_logs visibility';
 end $$;

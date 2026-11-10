@@ -113,6 +113,50 @@ def run():
 
         check("대시보드 위젯 + DEMO 표시 + 시드 주제", dashboard)
 
+        def dashboard_insights():
+            demo_title = "[DEMO] 엔터프라이즈 Agentic AI 도입 체크리스트"
+            page.goto(f"{BASE}/")
+
+            # 1) 항목 설명: ⓘ 버튼 → 설명 팝오버, Esc 로 닫힘
+            page.get_by_role("button", name="Daily Top 10 설명").click()
+            note = page.get_by_role("note")
+            expect(note).to_contain_text("출처 안에서의 순위")
+            page.keyboard.press("Escape")
+            expect(note).to_have_count(0)
+            page.get_by_role("button", name="오늘 신규 콘텐츠 설명").click()
+            expect(page.get_by_role("note")).to_contain_text("KST 00:00")
+            page.keyboard.press("Escape")
+
+            # 2) 상세 보기: 제목 클릭 → 패널(요약·데이터 권한·원문 링크·연결 주제), Esc 로 닫힘
+            page.get_by_role("button", name=demo_title).first.click()
+            dialog = page.get_by_role("dialog", name=demo_title)
+            expect(dialog).to_be_visible()
+            expect(dialog.get_by_text("요약 (DEMO 예시)")).to_be_visible()
+            expect(dialog.get_by_text("데이터 권한")).to_be_visible()
+            expect(dialog.get_by_text("AI 처리 권한이 확인되지 않아")).to_be_visible()
+            expect(dialog.get_by_role("link", name="원문 열기")).to_have_attribute("href", re.compile(r"news\.ycombinator\.com"))
+            expect(dialog.get_by_role("link", name="Agentic AI", exact=True)).to_be_visible()
+            page.screenshot(path=f"{SHOTS}/dashboard-detail.png")
+            page.keyboard.press("Escape")
+            expect(dialog).to_be_hidden()
+
+            # 3) My Topics Update 펼치기 → 최신 콘텐츠 목록 → 상세 보기
+            page.get_by_role("button", name=re.compile(r"^Agentic AI 최신 콘텐츠 펼치기")).click()
+            topic_list = page.get_by_role("list", name="Agentic AI 최신 콘텐츠")
+            expect(topic_list.get_by_role("button", name=demo_title)).to_be_visible()
+            topic_list.get_by_role("button", name=demo_title).click()
+            expect(page.get_by_role("dialog", name=demo_title)).to_be_visible()
+            page.get_by_role("button", name="상세 보기 닫기").click()
+            expect(page.get_by_role("dialog", name=demo_title)).to_be_hidden()
+
+            # 4) 키워드 순위 → Trending 키워드 필터
+            page.get_by_role("list", name="최근 7일 키워드 순위").get_by_role("link").first.click()
+            expect(page).to_have_url(re.compile(r"/trending\?.*kw="))
+            expect(page.get_by_role("link", name=re.compile("키워드 필터 .* 해제"))).to_be_visible()
+            assert page.locator("article").count() >= 1, "키워드 필터 결과가 비어 있음"
+
+        check("대시보드 항목 설명·상세 보기·주제 펼치기·키워드 이동", dashboard_insights)
+
         def nav_all():
             for href, title in [
                 ("/trending", "Trending Posts"),
@@ -239,10 +283,10 @@ def run():
             page.fill("#m-tags", "rag, 사례")
             page.select_option("#m-folder", label="Research")
             page.get_by_role("button", name="등록 및 저장").click()
-            expect(page.get_by_role("link", name="RAG 실무 적용 사례")).to_be_visible()
+            expect(page.get_by_role("button", name="RAG 실무 적용 사례")).to_be_visible()
             expect(page.locator("article")).to_have_count(2)
             # 출처 로고: LinkedIn 링크 → LinkedIn 로고, DEMO 콘텐츠 → DEMO 로고
-            art = page.locator("article", has=page.get_by_role("link", name="RAG 실무 적용 사례"))
+            art = page.locator("article", has=page.get_by_role("button", name="RAG 실무 적용 사례"))
             expect(art.get_by_role("img", name="LinkedIn 로고")).to_be_visible()
             expect(page.get_by_role("img", name="DEMO DATA 로고").first).to_be_visible()
             # 메모 편집 + KB 추가
@@ -261,7 +305,7 @@ def run():
             page.screenshot(path=f"{SHOTS}/saved.png", full_page=True)
             # Knowledge Base 반영
             page.goto(f"{BASE}/knowledge")
-            expect(page.get_by_role("link", name="RAG 실무 적용 사례")).to_be_visible()
+            expect(page.get_by_role("button", name="RAG 실무 적용 사례")).to_be_visible()
             # 삭제
             page.goto(f"{BASE}/saved")
             page.locator("article").first.get_by_role("button", name="저장 삭제").click()
@@ -278,13 +322,13 @@ def run():
                 page.fill("#m-url", url)
                 page.fill("#m-title", title)
                 page.get_by_role("button", name="등록 및 저장").click()
-                expect(page.get_by_role("link", name=title)).to_be_visible()
+                expect(page.get_by_role("button", name=title)).to_be_visible()
             page.goto(f"{BASE}/trending?period=monthly&limit=50&lang=ko")
-            expect(page.get_by_role("link", name=ko_title)).to_be_visible()
-            expect(page.get_by_role("link", name=en_title)).to_have_count(0)
+            expect(page.get_by_role("button", name=ko_title)).to_be_visible()
+            expect(page.get_by_role("button", name=en_title)).to_have_count(0)
             page.goto(f"{BASE}/trending?period=monthly&limit=50&lang=en")
-            expect(page.get_by_role("link", name=en_title)).to_be_visible()
-            expect(page.get_by_role("link", name=ko_title)).to_have_count(0)
+            expect(page.get_by_role("button", name=en_title)).to_be_visible()
+            expect(page.get_by_role("button", name=ko_title)).to_have_count(0)
 
         check("직접 등록 콘텐츠 언어 판별 → Trending 언어 필터", language_detection)
 
@@ -344,16 +388,16 @@ def run():
 
                 # 주제와 일치한 글만 저장, 출처 로고 표시
                 page.goto(f"{BASE}/trending?period=monthly&limit=50")
-                art = page.locator("article", has=page.get_by_role("link", name=hit))
+                art = page.locator("article", has=page.get_by_role("button", name=hit))
                 expect(art).to_be_visible()
                 expect(art.get_by_role("img", name="RSS 로고")).to_be_visible()
                 expect(art.get_by_text("E2E Fixture Feed")).to_be_visible()
-                expect(page.get_by_role("link", name=miss)).to_have_count(0)
+                expect(page.get_by_role("button", name=miss)).to_have_count(0)
 
                 # 주제 연결 (Agentic AI)
                 page.goto(f"{BASE}/topics")
                 page.get_by_role("link", name="Agentic AI", exact=True).click()
-                expect(page.get_by_role("link", name=hit)).to_be_visible()
+                expect(page.get_by_role("button", name=hit)).to_be_visible()
 
                 # 수집 이력 + 10분 제한
                 page.goto(f"{BASE}/settings")

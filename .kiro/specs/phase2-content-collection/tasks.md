@@ -46,5 +46,5 @@
   - [x] README, `.env.example`(CRON_SECRET, GITHUB_TOKEN), api-feasibility-matrix 갱신
   - [x] 9.1 `npm run verify:full` 통과 (unit 24, DB 13, E2E 19)
   - [x] 9.2 실제 소스 1회 수집(로컬): 미인증 401 확인, 9개 소스 모두 success(약 9초)
-  - [ ] 9.3 PR 생성 → CI(`verify-full`) 통과 → 병합
+  - [x] 9.3 PR #2 생성 → CI(`verify-full`) 통과 → 병합 (`f3a633e`)
   - [ ] 9.4 운영 배포 후 Vercel Cron 첫 실행 결과 확인 (Supabase Cloud·Vercel 연결 후)

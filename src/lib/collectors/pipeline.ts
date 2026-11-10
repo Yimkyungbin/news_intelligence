@@ -4,6 +4,7 @@ import { adapterFor, type SourceRow } from "./adapters";
 import { classify, itemLanguage } from "./classify";
 import { FetchError, redactUrl, withRetry } from "./http";
 import type { CollectedItem, TopicForClassify } from "./types";
+import { normalizeKeywords } from "@/lib/keywords";
 
 /**
  * 수집 파이프라인 (요구사항 1~3, 5)
@@ -183,7 +184,8 @@ async function storeForUser(admin: Admin, userId: string, source: Source, items:
       published_at: item.publishedAt,
       language: itemLanguage(item),
       content_type: item.contentType,
-      keywords: [...new Set([...matches.flatMap((m) => m.matched.map((k) => k.toLowerCase())), ...item.tags.map((t) => t.toLowerCase())])].slice(0, 10),
+      // 일치한 주제 키워드 + 출처 태그를 화면과 같은 규칙으로 정리 (src/lib/keywords.ts)
+      keywords: normalizeKeywords([...matches.flatMap((m) => m.matched), ...item.tags], 10),
       popularity: item.popularity,
       provenance: "collected",
       permission_status: source.permission_status,

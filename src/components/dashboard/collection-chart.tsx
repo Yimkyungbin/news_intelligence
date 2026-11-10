@@ -4,7 +4,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 
 export function CollectionChart({ data }: { data: { day: string; count: number }[] }) {
   return (
-    <div className="h-40 w-full" role="img" aria-label={`최근 7일 신규 콘텐츠: ${data.map((d) => `${d.day} ${d.count}건`).join(", ")}`}>
+    <div className="h-40 w-full" role="img" aria-label={`최근 7일 게시일 기준 콘텐츠 수: ${data.map((d) => `${d.day} ${d.count}건`).join(", ")}`}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -24 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
