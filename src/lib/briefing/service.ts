@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { filterAIAllowed } from "@/lib/ai/gate";
 import { AIError } from "@/lib/ai/openai";
 import { getProvider, providerStatus } from "@/lib/ai/provider";
+import { disabledSourceIdsFor, hiddenSourceFilter } from "@/lib/source-settings";
 import { aiUsageToday, DAILY_AI_LIMIT, processPending } from "@/lib/ai/service";
 import { briefingAICandidates, composeBriefing, kstDate, type AIInsightSection, type BriefingItem, type BriefingLink } from "./compose";
 
@@ -47,16 +48,19 @@ async function buildAISection(db: Admin, userId: string, items: BriefingItem[], 
 
 async function loadInputs(db: Admin, userId: string, now: Date) {
   const since = new Date(now.getTime() - 48 * 3600_000).toISOString();
+  const hidden = hiddenSourceFilter(await disabledSourceIdsFor(db, userId));
+  let itemQuery = db
+    .from("content_items")
+    .select(
+      "id,title,summary,original_url,source_name,source_type,content_type,provenance,published_at,collected_at,keywords,popularity,ai_processing_allowed,external_llm_allowed,source:data_sources(slug),content_topics(topic_id)",
+    )
+    .eq("user_id", userId)
+    .eq("display_allowed", true)
+    .or(`published_at.gte.${since},and(published_at.is.null,collected_at.gte.${since})`)
+    .limit(1000);
+  if (hidden) itemQuery = itemQuery.or(hidden);
   const [{ data: items }, { data: topics }, { data: links }] = await Promise.all([
-    db
-      .from("content_items")
-      .select(
-        "id,title,summary,original_url,source_name,source_type,content_type,provenance,published_at,collected_at,keywords,popularity,ai_processing_allowed,external_llm_allowed,source:data_sources(slug),content_topics(topic_id)",
-      )
-      .eq("user_id", userId)
-      .eq("display_allowed", true)
-      .or(`published_at.gte.${since},and(published_at.is.null,collected_at.gte.${since})`)
-      .limit(1000),
+    itemQuery,
     db.from("topics").select("id,name").eq("user_id", userId).eq("is_active", true),
     db
       .from("influencer_links")

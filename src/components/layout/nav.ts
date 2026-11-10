@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   BookOpen,
   Bookmark,
   Hash,
@@ -15,6 +16,7 @@ export type NavItem = { href: string; label: string; icon: LucideIcon; phase?: s
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/trending", label: "Trending Posts", icon: TrendingUp },
+  { href: "/statistics", label: "Statistics", icon: BarChart3 },
   { href: "/influencers", label: "Influencers", icon: Users },
   { href: "/following", label: "My Following", icon: UserCheck },
   { href: "/topics", label: "My Topics", icon: Hash },

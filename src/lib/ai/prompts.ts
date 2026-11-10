@@ -91,4 +91,34 @@ export function buildBriefingInsightPrompt(date: string, items: PromptContent[],
   };
 }
 
+/** 일괄 번역·한 줄 시사점 (최대 10건씩) */
+export const BATCH_SIZE = 10;
+export function buildBatchMetaPrompt(items: (PromptContent & { language: string })[]): BuiltPrompt {
+  const list = items.slice(0, BATCH_SIZE).map((c, i) => renderItem(c, i + 1).replace("<item id=", `<item lang="${c.language === "ko" ? "ko" : "foreign"}" id=`));
+  return {
+    system: [
+      "너는 기술 뉴스 편집자다. 각 item 에 대해 JSON 으로 답한다. items 배열의 n 은 item id 번호다.",
+      ...COMMON_RULES,
+      'lang="foreign" 인 item: title_ko 에 제목을 자연스러운 한국어로 번역하고, summary_ko 에 요약을 한국어로 번역한다(요약이 없으면 빈 문자열).',
+      'lang="ko" 인 item: title_ko 와 summary_ko 는 빈 문자열로 둔다.',
+      "모든 item: implication_ko 에 최근 기술·산업 트렌드 관점에서 이 콘텐츠가 왜 중요한지 한국어 한 문장(80자 이내)을 쓴다. 근거가 부족하면 빈 문자열.",
+      "고유명사·제품명·코드는 번역하지 않는다.",
+    ].join("\n"),
+    user: `<content>\n${list.join("\n")}\n</content>`,
+  };
+}
+
+/** Trending 조건별 트렌드 시사점 */
+export function buildTrendInsightPrompt(scope: string, items: PromptContent[], keywords: string[]): BuiltPrompt {
+  const list = items.slice(0, MAX_ITEMS).map((c, i) => renderItem(c, i + 1));
+  return {
+    system: [
+      "너는 기술 트렌드 애널리스트다. 주어진 기간·조건의 인기 콘텐츠를 보고 최근 트렌드 관점의 시사점을 JSON 으로 답한다.",
+      ...COMMON_RULES,
+      "headline: 이 기간 트렌드를 한 문장으로. insights: 3~5개, 각 title(한 줄 시사점), detail(2~3문장: 무엇이 바뀌고 있고 실무·산업에 어떤 의미인지), content_refs(근거 item id).",
+    ].join("\n"),
+    user: [`조건: ${clip(scope, 200)}`, `상위 키워드: ${keywords.slice(0, 15).join(", ") || "없음"}`, `<content>\n${list.join("\n")}\n</content>`].join("\n"),
+  };
+}
+
 export const PROMPT_LIMITS = { MAX_ITEMS, MAX_SUMMARY, MAX_TITLE };

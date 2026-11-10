@@ -92,3 +92,137 @@ export function parseHfModels(raw: unknown): CollectedItem[] {
     ];
   });
 }
+
+/* ---------- dev.to (api/articles) ---------- */
+export function parseDevto(raw: unknown): CollectedItem[] {
+  if (!Array.isArray(raw)) throw new Error("dev.to 응답 형식이 올바르지 않습니다.");
+  return raw.flatMap((a) => {
+    const it = a as Record<string, unknown>;
+    const title = cleanText(it.title, 500);
+    const url = normalizeUrl(it.canonical_url) ?? normalizeUrl(it.url);
+    if (!title || !url) return [];
+    const tags = Array.isArray(it.tag_list) ? it.tag_list.filter((t): t is string => typeof t === "string").slice(0, 10) : [];
+    return [
+      {
+        title,
+        url,
+        summary: cleanText(it.description, SUMMARY_MAX),
+        author: cleanText((it.user as Record<string, unknown> | undefined)?.name, 100),
+        publishedAt: toIsoDate(it.published_at),
+        contentType: "article",
+        popularity: metrics({ likes: it.positive_reactions_count, comments: it.comments_count }),
+        tags,
+        language: null,
+      } satisfies CollectedItem,
+    ];
+  });
+}
+
+/* ---------- Hacker News 검색 (Algolia search) ---------- */
+export function parseAlgoliaHits(raw: unknown): CollectedItem[] {
+  const hits = (raw as { hits?: unknown[] } | null)?.hits;
+  if (!Array.isArray(hits)) throw new Error("HN 검색 응답 형식이 올바르지 않습니다.");
+  return hits.flatMap((h) => {
+    const it = h as Record<string, unknown>;
+    const title = cleanText(it.title, 500);
+    const id = typeof it.objectID === "string" && /^\d+$/.test(it.objectID) ? it.objectID : null;
+    if (!title || !id) return [];
+    return [
+      {
+        title,
+        url: normalizeUrl(it.url) ?? `https://news.ycombinator.com/item?id=${id}`,
+        summary: cleanText(it.story_text, SUMMARY_MAX),
+        author: cleanText(it.author, 100),
+        publishedAt: toIsoDate(it.created_at),
+        contentType: "discussion",
+        popularity: metrics({ points: it.points, comments: it.num_comments }),
+        tags: [],
+        language: null,
+      } satisfies CollectedItem,
+    ];
+  });
+}
+
+/** SNS 게시글 제목: 본문 첫 줄(최대 120자) */
+function postTitle(text: string): string {
+  const first = text.split(/(?<=[.!?。])\s|\n/)[0] || text;
+  return Array.from(first).length > 120 ? `${Array.from(first).slice(0, 119).join("")}…` : first;
+}
+
+const lang = (v: unknown): "ko" | "en" | null => (v === "ko" ? "ko" : v === "en" ? "en" : null);
+
+/* ---------- Mastodon (timelines/tag) ---------- */
+export function parseMastodonStatuses(raw: unknown): CollectedItem[] {
+  if (!Array.isArray(raw)) throw new Error("Mastodon 응답 형식이 올바르지 않습니다.");
+  return raw.flatMap((s) => {
+    const st = s as Record<string, unknown>;
+    // 공개 게시물만, 부스트·민감 표시 게시물 제외
+    if (st.visibility !== "public" || st.reblog || st.sensitive) return [];
+    const text = cleanText(st.content, 2000);
+    const url = normalizeUrl(st.url);
+    if (!text || !url) return [];
+    const account = (st.account as Record<string, unknown> | undefined) ?? {};
+    const tags = Array.isArray(st.tags)
+      ? st.tags.map((t) => (t as Record<string, unknown>).name).filter((t): t is string => typeof t === "string").slice(0, 10)
+      : [];
+    return [
+      {
+        title: postTitle(text),
+        url,
+        summary: cleanText(text, SUMMARY_MAX),
+        author: cleanText(account.acct, 100),
+        publishedAt: toIsoDate(st.created_at),
+        contentType: "post",
+        popularity: metrics({ likes: st.favourites_count, comments: st.replies_count }),
+        tags,
+        language: lang(st.language),
+      } satisfies CollectedItem,
+    ];
+  });
+}
+
+/* ---------- Bluesky (app.bsky.feed.getAuthorFeed) ---------- */
+export const BLUESKY_HANDLE = /^(?=.{3,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i;
+
+/** https://bsky.app/profile/<handle> → handle. 아니면 null */
+export function blueskyHandleFromUrl(url: string): string | null {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:" || u.hostname !== "bsky.app") return null;
+    const m = u.pathname.match(/^\/profile\/([^/]+)\/?$/);
+    const handle = m ? decodeURIComponent(m[1]).toLowerCase() : null;
+    return handle && BLUESKY_HANDLE.test(handle) ? handle : null;
+  } catch {
+    return null;
+  }
+}
+
+export function parseBlueskyFeed(raw: unknown): CollectedItem[] {
+  const feed = (raw as { feed?: unknown[] } | null)?.feed;
+  if (!Array.isArray(feed)) throw new Error("Bluesky 응답 형식이 올바르지 않습니다.");
+  return feed.flatMap((f) => {
+    const entry = f as Record<string, unknown>;
+    if (entry.reason) return []; // 리포스트 제외
+    const post = (entry.post as Record<string, unknown> | undefined) ?? {};
+    const author = (post.author as Record<string, unknown> | undefined) ?? {};
+    const record = (post.record as Record<string, unknown> | undefined) ?? {};
+    const handle = typeof author.handle === "string" && BLUESKY_HANDLE.test(author.handle) ? author.handle : null;
+    const rkey = typeof post.uri === "string" ? post.uri.split("/").pop() : null;
+    const text = cleanText(record.text, 2000);
+    if (!handle || !rkey || !/^[a-z0-9]+$/i.test(rkey) || !text) return [];
+    const langs = Array.isArray(record.langs) ? record.langs : [];
+    return [
+      {
+        title: postTitle(text),
+        url: `https://bsky.app/profile/${handle}/post/${rkey}`,
+        summary: cleanText(text, SUMMARY_MAX),
+        author: handle,
+        publishedAt: toIsoDate(record.createdAt),
+        contentType: "post",
+        popularity: metrics({ likes: post.likeCount, comments: post.replyCount }),
+        tags: [],
+        language: lang(langs[0]),
+      } satisfies CollectedItem,
+    ];
+  });
+}

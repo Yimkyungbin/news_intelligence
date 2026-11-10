@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { ExternalLink, PanelRightOpen, ShieldOff } from "lucide-react";
+import { ExternalLink, Languages, Lightbulb, PanelRightOpen, ShieldOff } from "lucide-react";
 import { SourceBadge } from "@/components/sources/source-badge";
 import { SaveButton } from "./save-button";
 import { OpenDetailButton } from "./content-detail";
 import { popularityEntries } from "@/lib/content";
 import { normalizeKeywords } from "@/lib/keywords";
 import { cn, formatDate } from "@/lib/utils";
-import type { ContentItem } from "@/lib/types";
+import type { ContentAIMeta, ContentItem } from "@/lib/types";
 
 /**
  * 콘텐츠 카드: 출처 로고·출처명·유형을 최상단에 표시해 수집처를 즉시 구분
@@ -19,6 +19,8 @@ export function ContentCard({
   rankNote,
   compact = false,
   footer,
+  ai,
+  translate = false,
 }: {
   item: ContentItem;
   saved: boolean;
@@ -27,10 +29,23 @@ export function ContentCard({
   rankNote?: string;
   compact?: boolean;
   footer?: React.ReactNode;
+  /** 번역·한 줄 시사점 (운영자가 허용한 출처만 존재) */
+  ai?: ContentAIMeta;
+  /** 사용자 "한국어로 보기" 설정 */
+  translate?: boolean;
 }) {
   const metrics = popularityEntries(item.popularity);
   const authorMeta = [item.author_title, item.author_company].filter(Boolean).join(" · ");
   const keywords = normalizeKeywords(item.keywords, 5);
+  const topics = (item.topic_links ?? [])
+    .filter((l) => l.topic)
+    .sort((a, b) => b.relevance_score - a.relevance_score)
+    .slice(0, compact ? 2 : 3)
+    .map((l) => l.topic!);
+  // 번역: 토글이 켜져 있고, 외국어 콘텐츠이며, 번역이 있을 때만
+  const translated = translate && item.language !== "ko" && Boolean(ai?.title_ko);
+  const title = translated ? ai!.title_ko! : item.title;
+  const summary = translate && item.language !== "ko" && ai?.summary_ko ? ai.summary_ko : item.summary;
 
   return (
     <article
@@ -75,12 +90,39 @@ export function ContentCard({
           </div>
         </div>
 
-        <OpenDetailButton contentId={item.id} className="mt-1.5 line-clamp-2 block w-full text-sm font-medium leading-snug hover:text-primary">
-          {item.title}
-        </OpenDetailButton>
+        {topics.length ? (
+          <div className="mt-1.5 flex flex-wrap gap-1" aria-label="연결된 관심 주제">
+            {topics.map((t) => (
+              <Link key={t.id} href={`/topics/${t.id}`} className="rounded-full border border-primary/30 bg-primary/5 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/10">
+                {t.name}
+              </Link>
+            ))}
+          </div>
+        ) : null}
 
-        {item.summary ? (
-          <p className={cn("mt-1 text-xs text-muted-foreground", compact ? "line-clamp-1" : "line-clamp-2")}>{item.summary}</p>
+        <OpenDetailButton contentId={item.id} className="mt-1.5 line-clamp-2 block w-full text-sm font-semibold leading-snug hover:text-primary">
+          {title}
+        </OpenDetailButton>
+        {translated ? (
+          <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground" title="원문 제목">
+            <Languages className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <span className="shrink-0 rounded bg-secondary px-1">{ai?.is_demo ? "DEMO 번역" : "번역"}</span>
+            <span className="truncate">원문: {item.title}</span>
+          </p>
+        ) : null}
+
+        {summary ? (
+          <p className={cn("mt-1 text-xs leading-relaxed text-muted-foreground", compact ? "line-clamp-1" : "line-clamp-3")}>{summary}</p>
+        ) : null}
+
+        {ai?.implication_ko ? (
+          <p className={cn("mt-1.5 flex gap-1.5 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-foreground", compact && "line-clamp-1")}>
+            <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden="true" />
+            <span>
+              <span className="font-semibold">시사점</span> {ai.implication_ko}
+              {ai.is_demo ? <span className="ml-1 text-[10px] text-amber-700 dark:text-amber-400">(DEMO)</span> : null}
+            </span>
+          </p>
         ) : null}
 
         <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">

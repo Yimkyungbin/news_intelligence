@@ -2,6 +2,9 @@ import { Check, Minus, Power, Trash2 } from "lucide-react";
 import { ActionButton, ConfirmButton } from "@/components/confirm-button";
 import { AddFeedForm, CollectNowButton } from "./collect-forms";
 import { deleteUserFeed, setUserFeedActive } from "./collect-actions";
+import { SourceToggle } from "./source-toggle";
+import { getDisabledSourceIds } from "@/lib/source-settings";
+import { isAdminEmail } from "@/lib/admin";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { hasAdminKey } from "@/lib/supabase/admin";
@@ -60,7 +63,13 @@ export default async function SettingsPage() {
       .order("started_at", { ascending: false })
       .limit(20),
   ]);
-  const sources = ((allSources ?? []) as DataSource[]).filter((s) => s.user_id === null);
+  const disabled = new Set(await getDisabledSourceIds(user.id));
+  const admin = isAdminEmail(user.email);
+  // 정렬: 수집 소스(유형별) → 직접 입력·DEMO → LinkedIn
+  const TYPE_ORDER = ["news", "official_blog", "rss", "public_api", "social_api", "demo", "user_provided", "linkedin_api"];
+  const sources = ((allSources ?? []) as DataSource[])
+    .filter((s) => s.user_id === null)
+    .sort((a, b) => TYPE_ORDER.indexOf(a.source_type) - TYPE_ORDER.indexOf(b.source_type) || a.name.localeCompare(b.name, "ko"));
   const myFeeds = ((allSources ?? []) as DataSource[]).filter((s) => s.user_id === user.id);
   type LogRow = {
     id: string;
@@ -92,19 +101,20 @@ export default async function SettingsPage() {
           <CardHeader>
             <CardTitle>데이터 소스 관리</CardTitle>
             <CardDescription>
-              수집처별 로고·권한 상태·허용 처리 범위. 상태 기준은 docs/api-feasibility-matrix.md (AVAILABLE / CONDITIONAL / UNAVAILABLE / NOT_VERIFIED)
+              수집처별 사용 여부(내 계정 기준)·로고·권한 상태·허용 처리 범위. 끈 소스는 수집하지 않고 피드에서 숨깁니다(저장한 글은 유지). 상태 기준은 docs/api-feasibility-matrix.md (AVAILABLE / CONDITIONAL / UNAVAILABLE / NOT_VERIFIED)
             </CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-xs">
+            <table className="w-full min-w-[820px] text-left text-xs" aria-label="데이터 소스 목록">
               <thead className="text-muted-foreground">
                 <tr className="border-b">
+                  <th className="py-2 pr-2 font-medium">사용</th>
                   <th className="py-2 pr-2 font-medium">소스</th>
                   <th className="py-2 pr-2 font-medium">권한 상태</th>
                   <th className="py-2 pr-2 font-medium">연결</th>
                   <th className="py-2 pr-2 text-center font-medium">저장</th>
                   <th className="py-2 pr-2 text-center font-medium">표시</th>
-                  <th className="py-2 pr-2 text-center font-medium">AI 처리</th>
+                  <th className="py-2 pr-2 text-center font-medium">AI 번역·요약{admin ? " (운영자)" : ""}</th>
                   <th className="py-2 pr-2 text-center font-medium">외부 LLM</th>
                   <th className="py-2 pr-2 font-medium">보관</th>
                   <th className="py-2 font-medium">비고</th>
@@ -112,7 +122,14 @@ export default async function SettingsPage() {
               </thead>
               <tbody>
                 {sources.map((s) => (
-                  <tr key={s.id} className="border-b align-top last:border-0">
+                  <tr key={s.id} className={`border-b align-top last:border-0 ${disabled.has(s.id) ? "opacity-50" : ""}`}>
+                    <td className="py-2 pr-2">
+                      {s.source_type === "user_provided" || s.source_type === "linkedin_api" ? (
+                        <span className="text-[11px] text-muted-foreground">-</span>
+                      ) : (
+                        <SourceToggle sourceId={s.id} name={s.name} enabled={!disabled.has(s.id)} />
+                      )}
+                    </td>
                     <td className="py-2 pr-2">
                       <SourceBadge
                         name={s.name}
@@ -130,7 +147,13 @@ export default async function SettingsPage() {
                     <td className="py-2 pr-2">{CONNECTION_LABEL[s.connection_status] ?? s.connection_status}</td>
                     <td className="py-2 pr-2 text-center"><Flag on={s.storage_allowed} label="저장" /></td>
                     <td className="py-2 pr-2 text-center"><Flag on={s.display_allowed} label="표시" /></td>
-                    <td className="py-2 pr-2 text-center"><Flag on={s.ai_processing_allowed} label="AI 처리" /></td>
+                    <td className="py-2 pr-2 text-center">
+                      {admin && !["linkedin_api", "user_provided", "demo"].includes(s.source_type) ? (
+                        <SourceToggle sourceId={s.id} name={s.name} enabled={s.ai_processing_allowed} kind="ai" />
+                      ) : (
+                        <Flag on={s.ai_processing_allowed} label="AI 처리" />
+                      )}
+                    </td>
                     <td className="py-2 pr-2 text-center"><Flag on={s.external_llm_allowed} label="외부 LLM" /></td>
                     <td className="py-2 pr-2 whitespace-nowrap">{s.retention_days ? `${s.retention_days}일` : "-"}</td>
                     <td className="max-w-72 py-2 text-muted-foreground">

@@ -1,53 +1,47 @@
 import Link from "next/link";
 import { X } from "lucide-react";
-import { normalizeKeyword, normalizeKeywords } from "@/lib/keywords";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { getSavedContentIds, listContent } from "@/lib/queries";
+import { getAIMeta, getSavedContentIds, getTranslatePref } from "@/lib/queries";
 import { rankContent } from "@/lib/content";
 import { cn, daysAgoIso } from "@/lib/utils";
+import { trendDelta } from "@/lib/trends/compute";
+import { LANGS, LIMITS, parseTrendParams, PERIODS, SORTS, trendCacheKey, TYPES } from "@/lib/trends/params";
+import { loadTrendItems, type TrendInsightContent } from "@/lib/trends/service";
 import { ContentCard } from "@/components/content/content-card";
+import { TranslateToggle } from "@/components/content/translate-toggle";
+import { TrendPanel } from "@/components/trends/trend-panel";
 import { Badge, EmptyState, PageHeader } from "@/components/ui/primitives";
 
 export const metadata = { title: "Trending Posts" };
-
-const PERIODS = { daily: { label: "Daily", days: 1 }, weekly: { label: "Weekly", days: 7 }, monthly: { label: "Monthly", days: 30 } } as const;
-const LIMITS = [10, 20, 50] as const;
-const TYPES = { "": "전체 유형", article: "아티클", post: "게시글", paper: "논문", repository: "저장소", model: "모델", discussion: "토론" } as const;
-const LANGS = { "": "전체 언어", ko: "한국어", en: "영어" } as const;
-const SORTS = { popular: "인기순", latest: "게시일순" } as const;
-
-function pick<T extends string>(v: unknown, allowed: readonly T[], fallback: T): T {
-  return typeof v === "string" && (allowed as readonly string[]).includes(v) ? (v as T) : fallback;
-}
+// AI 시사점 생성(Server Action) 실행 시간 상한
+export const maxDuration = 300;
 
 export default async function TrendingPage({ searchParams }: PageProps<"/trending">) {
   const sp = await searchParams;
-  const period = pick(sp.period, Object.keys(PERIODS) as (keyof typeof PERIODS)[], "weekly");
-  const limit = Number(pick(sp.limit, LIMITS.map(String), "10"));
-  const type = pick(sp.type, Object.keys(TYPES) as (keyof typeof TYPES)[], "");
-  const lang = pick(sp.lang, Object.keys(LANGS) as (keyof typeof LANGS)[], "");
-  const sort = pick(sp.sort, Object.keys(SORTS) as (keyof typeof SORTS)[], "popular");
-  // 키워드 필터: 화면에 표시되는 정리된 키워드 기준으로 비교
-  const kw = typeof sp.kw === "string" ? (normalizeKeyword(sp.kw.slice(0, 60)) ?? "") : "";
-
   const user = await requireUser();
   const supabase = await createClient();
   const { data: topics } = await supabase.from("topics").select("id,name").eq("user_id", user.id).order("name");
-  const topic = pick(sp.topic, (topics ?? []).map((t) => t.id as string), "");
+  const params = parseTrendParams(sp, (topics ?? []).map((t) => t.id as string));
+  const { period, limit, type, lang, sort, topic, kw } = params;
 
-  const [allItems, saved] = await Promise.all([
-    listContent(user.id, {
-      sinceIso: daysAgoIso(PERIODS[period].days),
-      limit: 300,
-      topicId: topic || undefined,
-      contentType: type || undefined,
-      language: lang || undefined,
-    }),
+  const [{ current: items, previous }, saved, translate, insightRes] = await Promise.all([
+    loadTrendItems(user.id, params),
     getSavedContentIds(user.id),
+    getTranslatePref(user.id),
+    supabase
+      .from("trend_insights")
+      .select("content,model_name,is_demo,generated_at")
+      .eq("user_id", user.id)
+      .eq("cache_key", trendCacheKey(params))
+      .gte("generated_at", daysAgoIso(1))
+      .order("generated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
-  const items = kw ? allItems.filter((i) => normalizeKeywords(i.keywords, 20).includes(kw)) : allItems;
   const result = sort === "popular" ? rankContent(items, limit) : { items: items.slice(0, limit), ranked: false, notes: {} as Record<string, string> };
+  const meta = await getAIMeta(result.items.map((i) => i.original_url));
+  const delta = trendDelta(items, previous);
 
   const current = { period, limit: String(limit), type, lang, sort, topic, kw };
   const href = (patch: Partial<typeof current>) => {
@@ -62,6 +56,7 @@ export default async function TrendingPage({ searchParams }: PageProps<"/trendin
       <PageHeader
         title="Trending Posts"
         description="수집된 콘텐츠 중 인기 콘텐츠를 확인합니다. LinkedIn 전체 인기 순위가 아닙니다."
+        actions={<TranslateToggle on={translate} />}
       />
       <div className="mb-4 flex flex-col gap-2 rounded-lg border bg-card p-3">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -108,6 +103,13 @@ export default async function TrendingPage({ searchParams }: PageProps<"/trendin
         </div>
       </div>
 
+      <TrendPanel
+        delta={delta}
+        periodLabel={`최근 ${PERIODS[period].days}일`}
+        params={Object.fromEntries(Object.entries(current).filter(([, v]) => v)) as Record<string, string>}
+        insight={insightRes.data ? { ...insightRes.data, content: insightRes.data.content as TrendInsightContent } : null}
+      />
+
       <p className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <Badge variant="outline">집계 범위: 내 수집 콘텐츠 · 최근 {PERIODS[period].days}일</Badge>
         {kw ? (
@@ -129,7 +131,7 @@ export default async function TrendingPage({ searchParams }: PageProps<"/trendin
       ) : (
         <div className="flex flex-col gap-2">
           {result.items.map((it, i) => (
-            <ContentCard key={it.id} item={it} saved={saved.has(it.id)} rank={i + 1} rankNote={result.notes[it.id]} />
+            <ContentCard key={it.id} item={it} saved={saved.has(it.id)} rank={i + 1} rankNote={result.notes[it.id]} ai={meta.get(it.original_url)} translate={translate} />
           ))}
         </div>
       )}

@@ -12,6 +12,7 @@
  */
 import {
   siAnthropic,
+  siArstechnica,
   siArxiv,
   siBluesky,
   siDeepmind,
@@ -19,14 +20,18 @@ import {
   siGithub,
   siGoogle,
   siHuggingface,
+  siKakao,
   siKaggle,
+  siLobsters,
   siMastodon,
   siMedium,
   siMeta,
+  siNaver,
   siNvidia,
   siReddit,
   siRss,
   siSubstack,
+  siTechcrunch,
   siX,
   siYcombinator,
 } from "simple-icons";
@@ -76,6 +81,27 @@ export const LOGO_REGISTRY: Record<string, RegistryEntry> = {
   medium: icon(siMedium, "Medium"),
   devto: icon(siDevdotto, "dev.to"),
   kaggle: icon(siKaggle, "Kaggle"),
+  // 국내 IT 뉴스·커뮤니티
+  geeknews: mono("GN", "#2E7D32", "GeekNews"),
+  yozm: mono("요", "#5A2FE0", "요즘IT"),
+  zdnet: mono("ZD", "#D32F2F", "ZDNet Korea"),
+  etnews: mono("전", "#0B4EA2", "전자신문"),
+  aitimes: mono("AI", "#1A237E", "AI타임스"),
+  // 국내 기업 기술 블로그
+  kakao: icon(siKakao, "카카오"),
+  woowahan: mono("우", "#2AC1BC", "우아한형제들"),
+  naver: icon(siNaver, "네이버"),
+  toss: mono("T", "#0064FF", "토스"),
+  daangn: mono("당", "#FF6F0F", "당근"),
+  // 해외 IT 미디어
+  techcrunch: icon(siTechcrunch, "TechCrunch"),
+  theverge: mono("V", "#5200FF", "The Verge"),
+  mittr: mono("TR", "#111111", "MIT Technology Review"),
+  arstechnica: icon(siArstechnica, "Ars Technica"),
+  // 뉴스레터·블로그·커뮤니티
+  latentspace: mono("LS", "#7C3AED", "Latent Space"),
+  simonw: mono("SW", "#334155", "Simon Willison"),
+  lobsters: icon(siLobsters, "Lobsters"),
   user: mono("ME", "#64748B", "직접 입력"),
   demo: mono("DE", "#D97706", "DEMO DATA"),
 };
@@ -113,6 +139,22 @@ const HOST_MAP: Array<[string, string]> = [
   ["medium.com", "medium"],
   ["dev.to", "devto"],
   ["kaggle.com", "kaggle"],
+  ["news.hada.io", "geeknews"],
+  ["yozm.wishket.com", "yozm"],
+  ["zdnet.co.kr", "zdnet"],
+  ["etnews.com", "etnews"],
+  ["aitimes.com", "aitimes"],
+  ["kakao.com", "kakao"],
+  ["techblog.woowahan.com", "woowahan"],
+  ["naver.com", "naver"],
+  ["toss.tech", "toss"],
+  ["techcrunch.com", "techcrunch"],
+  ["theverge.com", "theverge"],
+  ["technologyreview.com", "mittr"],
+  ["arstechnica.com", "arstechnica"],
+  ["latent.space", "latentspace"],
+  ["simonwillison.net", "simonw"],
+  ["lobste.rs", "lobsters"],
 ];
 
 export function logoKeyForHost(host: string | null): string | null {

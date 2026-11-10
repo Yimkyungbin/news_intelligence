@@ -2,7 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { adapterFor, type SourceRow } from "./adapters";
 import { classify, itemLanguage } from "./classify";
-import { FetchError, redactUrl, withRetry } from "./http";
+import { FetchError, mapLimit, redactUrl, withRetry } from "./http";
 import type { CollectedItem, TopicForClassify } from "./types";
 import { normalizeKeywords } from "@/lib/keywords";
 
@@ -22,7 +22,12 @@ type Source = SourceRow & {
   retention_days: number | null;
 };
 
-type TopicRow = TopicForClassify & { user_id: string };
+type TopicRow = TopicForClassify & { user_id: string; search_queries: string[] | null };
+
+/** 소스 동시 처리 수 (외부 사이트 부하·실행 시간 균형) */
+const SOURCE_CONCURRENCY = 4;
+/** HN 검색에 쓰는 주제 검색 쿼리 최대 수 (전체 사용자 합산) */
+const MAX_SEARCH_QUERIES = 30;
 
 export type SourceResult = {
   sourceId: string;
@@ -56,7 +61,7 @@ export async function runCollection(opts: { userId?: string; trigger: "cron" | "
   const startedAt = new Date().toISOString();
 
   // 대상 사용자와 활성 주제
-  let topicQuery = admin.from("topics").select("id,user_id,keywords,language").eq("is_active", true);
+  let topicQuery = admin.from("topics").select("id,user_id,keywords,language,search_queries").eq("is_active", true);
   if (opts.userId) topicQuery = topicQuery.eq("user_id", opts.userId);
   const { data: topicRows, error: topicErr } = await topicQuery;
   if (topicErr) throw new Error(`주제 조회 실패: ${topicErr.message}`);
@@ -67,6 +72,18 @@ export async function runCollection(opts: { userId?: string; trigger: "cron" | "
     topicsByUser.set(t.user_id, list);
   }
   const userIds = [...topicsByUser.keys()];
+  const queriesByUser = new Map<string, string[]>();
+  for (const t of (topicRows ?? []) as TopicRow[]) {
+    queriesByUser.set(t.user_id, [...(queriesByUser.get(t.user_id) ?? []), ...(t.search_queries ?? [])]);
+  }
+  // 사용자별로 끈 소스 (요구사항 1.2)
+  const disabledBySource = new Map<string, Set<string>>();
+  if (userIds.length) {
+    const { data: off } = await admin.from("user_source_settings").select("user_id,source_id").eq("enabled", false).in("user_id", userIds);
+    for (const r of (off ?? []) as { user_id: string; source_id: string }[]) {
+      disabledBySource.set(r.source_id, (disabledBySource.get(r.source_id) ?? new Set()).add(r.user_id));
+    }
+  }
   // 활성 주제가 있는 사용자가 없으면 저장할 대상이 없으므로 외부 요청을 하지 않음
   if (userIds.length === 0) {
     return { startedAt, finishedAt: new Date().toISOString(), users: 0, sources: [], purged: 0 };
@@ -82,10 +99,15 @@ export async function runCollection(opts: { userId?: string; trigger: "cron" | "
   const { data: sourceRows, error: srcErr } = await sourceQuery;
   if (srcErr) throw new Error(`소스 조회 실패: ${srcErr.message}`);
 
-  const results: SourceResult[] = [];
-  for (const source of (sourceRows ?? []) as Source[]) {
-    const adapter = adapterFor(source);
-    if (!adapter) continue; // user-provided, demo, linkedin 등 수집 대상 아님
+  const processSource = async (source: Source): Promise<SourceResult | null> => {
+    // 사용자 소스는 소유자에게만, 시스템 소스는 대상 사용자 전체에게. 소스를 끈 사용자는 제외
+    const off = disabledBySource.get(source.id);
+    const targets = (source.user_id ? userIds.filter((u) => u === source.user_id) : userIds).filter((u) => !off?.has(u));
+    // 모든 대상 사용자가 끈 소스는 외부 요청을 하지 않음 (요구사항 1.6)
+    if (targets.length === 0) return null;
+    const queries = [...new Set(targets.flatMap((u) => queriesByUser.get(u) ?? []).map((q) => q.trim()).filter(Boolean))].slice(0, MAX_SEARCH_QUERIES);
+    const adapter = adapterFor(source, { queries });
+    if (!adapter) return null; // user-provided, demo, linkedin 등 수집 대상 아님
 
     const { data: log } = await admin
       .from("collection_logs")
@@ -103,8 +125,6 @@ export async function runCollection(opts: { userId?: string; trigger: "cron" | "
       result.fetched = items.length;
       if (skipped > 0) result.status = "partial";
 
-      // 사용자 소스는 소유자에게만, 시스템 소스는 대상 사용자 전체에게
-      const targets = source.user_id ? userIds.filter((u) => u === source.user_id) : userIds;
       for (const userId of targets) {
         result.stored += await storeForUser(admin, userId, source, items, topicsByUser.get(userId) ?? []);
       }
@@ -131,8 +151,12 @@ export async function runCollection(opts: { userId?: string; trigger: "cron" | "
         })
         .eq("id", log.id);
     }
-    results.push(result);
-  }
+    return result;
+  };
+
+  const results = (await mapLimit((sourceRows ?? []) as Source[], SOURCE_CONCURRENCY, processSource)).filter(
+    (r): r is SourceResult => r !== null,
+  );
 
   if (userIds.length) {
     await admin.from("topics").update({ last_collected_at: new Date().toISOString() }).eq("is_active", true).in("user_id", userIds);
@@ -193,7 +217,8 @@ async function storeForUser(admin: Admin, userId: string, source: Source, items:
       display_allowed: source.display_allowed,
       ai_processing_allowed: source.ai_processing_allowed,
       external_llm_allowed: source.external_llm_allowed,
-      ai_processing_status: "blocked",
+      // 운영자가 출처 AI 처리를 허용했으면 요약 대기(pending), 아니면 차단
+      ai_processing_status: source.ai_processing_allowed ? "pending" : "blocked",
       retention_policy: source.retention_days ? `${source.retention_days}d` : "source_default",
       retention_until: retentionUntil,
     }));
