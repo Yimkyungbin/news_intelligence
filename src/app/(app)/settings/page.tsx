@@ -9,7 +9,8 @@ import { formatDateTime } from "@/lib/utils";
 import { SourceBadge } from "@/components/sources/source-badge";
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, PageHeader } from "@/components/ui/primitives";
 import { DangerZone, ProfileForm } from "./settings-forms";
-import { AI_MODELS } from "@/lib/types";
+import { AI_MODELS, AI_MODEL_LABELS } from "@/lib/types";
+import { providerStatus } from "@/lib/ai/provider";
 import type { DataSource, PermissionStatus } from "@/lib/types";
 
 export const metadata = { title: "Settings" };
@@ -74,7 +75,7 @@ export default async function SettingsPage() {
   };
   const logRows = (logs ?? []) as unknown as LogRow[];
 
-  const openaiConfigured = Boolean(process.env.OPENAI_API_KEY);
+  const ai = providerStatus();
 
   return (
     <>
@@ -84,7 +85,7 @@ export default async function SettingsPage() {
           <CardHeader>
             <CardTitle>사용자 프로필 · 환경</CardTitle>
           </CardHeader>
-          <CardContent>{profile ? <ProfileForm profile={profile} models={AI_MODELS} /> : null}</CardContent>
+          <CardContent>{profile ? <ProfileForm profile={profile} models={AI_MODELS.map((m) => ({ value: m, label: AI_MODEL_LABELS[m] }))} /> : null}</CardContent>
         </Card>
 
         <Card>
@@ -260,8 +261,10 @@ export default async function SettingsPage() {
               <Badge variant="success">연결됨</Badge>
             </div>
             <div className="flex items-center justify-between rounded-md border p-3">
-              <span>OpenAI (Phase 3)</span>
-              <Badge variant={openaiConfigured ? "success" : "outline"}>{openaiConfigured ? "키 설정됨" : "미설정"}</Badge>
+              <span>AI ({ai.mode === "openai" ? "OpenAI" : ai.mode === "mock" ? "모의 AI" : "비활성"})</span>
+              <Badge variant={ai.mode === "openai" ? "success" : ai.mode === "mock" ? "demo" : "outline"} title={ai.reason}>
+                {ai.mode === "openai" ? "키 설정됨" : ai.mode === "mock" ? "DEMO" : "미설정"}
+              </Badge>
             </div>
             <div className="flex items-center justify-between rounded-md border p-3">
               <span>LinkedIn API</span>

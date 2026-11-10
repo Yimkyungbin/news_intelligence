@@ -8,7 +8,11 @@ import { getSavedContentIds, listContent } from "@/lib/queries";
 import { topKeywords } from "@/lib/content";
 import { formatDate } from "@/lib/utils";
 import { ContentCard } from "@/components/content/content-card";
+import { TopicInsightCard } from "@/components/briefing/topic-insight-card";
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, PageHeader } from "@/components/ui/primitives";
+
+// AI 인사이트 생성(Server Action) 실행 시간 상한
+export const maxDuration = 300;
 
 export default async function TopicDetailPage({ params }: PageProps<"/topics/[id]">) {
   const { id } = await params;
@@ -24,7 +28,18 @@ export default async function TopicDetailPage({ params }: PageProps<"/topics/[id
     .maybeSingle();
   if (!topic) notFound();
 
-  const [items, saved] = await Promise.all([listContent(user.id, { topicId: id, limit: 50 }), getSavedContentIds(user.id)]);
+  const [items, saved, insightRes] = await Promise.all([
+    listContent(user.id, { topicId: id, limit: 50 }),
+    getSavedContentIds(user.id),
+    supabase
+      .from("topic_insights")
+      .select("content,model_name,is_demo,generated_at,source_ids")
+      .eq("topic_id", id)
+      .eq("user_id", user.id)
+      .order("generated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
   const kw = topKeywords(items, 10);
 
   return (
@@ -90,12 +105,7 @@ export default async function TopicDetailPage({ params }: PageProps<"/topics/[id
               )}
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>AI 인사이트</CardTitle>
-              <CardDescription>Phase 3 · AI 처리 허용 콘텐츠만 분석</CardDescription>
-            </CardHeader>
-          </Card>
+          <TopicInsightCard topicId={topic.id} insight={insightRes.data} allowedCount={items.filter((i) => i.ai_processing_allowed).length} totalCount={items.length} />
         </div>
       </div>
     </>

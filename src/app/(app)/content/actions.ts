@@ -41,7 +41,16 @@ export type ContentDetail = {
   } | null;
   topics: { id: string; name: string; relevance: number }[];
   saved: { notes: string | null; tags: string[] } | null;
-  insight: { summary: string | null; model_name: string; processed_at: string } | null;
+  insight: {
+    summary: string | null;
+    key_points: string[];
+    keywords: string[];
+    insights: Partial<Record<"core" | "technical_meaning" | "business_impact" | "practical_use" | "related_tech", string>> & { technologies?: string[] };
+    model_name: string;
+    provider: string;
+    is_demo: boolean;
+    processed_at: string;
+  } | null;
 };
 
 const SELECT =
@@ -49,12 +58,12 @@ const SELECT =
   "source:data_sources(slug,name,logo_key,homepage_url,brand_color,policy_note,terms_url)," +
   "content_topics(relevance_score,topic:topics(id,name))," +
   "saved_posts(notes,tags)," +
-  "ai_insights(summary,model_name,processed_at)";
+  "ai_insights(summary,key_points,keywords,insights,model_name,provider,is_demo,processed_at)";
 
 type Row = Omit<ContentDetail, "topics" | "saved" | "insight"> & {
   content_topics: { relevance_score: number; topic: { id: string; name: string } | null }[];
   saved_posts: { notes: string | null; tags: string[] }[];
-  ai_insights: { summary: string | null; model_name: string; processed_at: string }[];
+  ai_insights: NonNullable<ContentDetail["insight"]>[];
 };
 
 /** 콘텐츠 상세 조회 (상세 보기 패널). RLS 로 본인 콘텐츠만 조회됨 */

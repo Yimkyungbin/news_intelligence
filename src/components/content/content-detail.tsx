@@ -8,6 +8,7 @@ import { SourceBadge } from "@/components/sources/source-badge";
 import { Badge } from "@/components/ui/primitives";
 import { buttonVariants } from "@/components/ui/button";
 import { SaveButton } from "./save-button";
+import { ContentAISection } from "./content-ai";
 import { METRIC_HELP, popularityEntries } from "@/lib/content";
 import { cn, formatDate, formatDateTime } from "@/lib/utils";
 
@@ -60,7 +61,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function DetailBody({ d, onNavigate }: { d: ContentDetail; onNavigate: () => void }) {
+function DetailBody({ d, onNavigate, onRefresh }: { d: ContentDetail; onNavigate: () => void; onRefresh: () => void }) {
   const metrics = popularityEntries(d.popularity);
   const authorMeta = [d.author_title, d.author_company].filter(Boolean).join(" · ");
 
@@ -123,22 +124,7 @@ function DetailBody({ d, onNavigate }: { d: ContentDetail; onNavigate: () => voi
         )}
       </Section>
 
-      <Section title="AI 요약">
-        {d.insight?.summary ? (
-          <div className="text-sm">
-            <p className="whitespace-pre-wrap leading-relaxed">{d.insight.summary}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              {d.insight.model_name} · {formatDateTime(d.insight.processed_at)}
-            </p>
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            {d.ai_processing_allowed
-              ? "AI 요약은 Phase 3에서 생성됩니다."
-              : "이 콘텐츠는 AI 처리 권한이 확인되지 않아 AI 요약을 실행하지 않습니다."}
-          </p>
-        )}
-      </Section>
+      <ContentAISection d={d} onChanged={onRefresh} />
 
       {metrics.length ? (
         <Section title="인기 지표 (출처 제공)">
@@ -247,10 +233,9 @@ export function ContentDetailProvider({ children }: { children: React.ReactNode 
 
   const close = useCallback(() => dialogRef.current?.close(), []);
 
-  const open = useCallback((contentId: string) => {
+  const load = useCallback((contentId: string, showLoading: boolean) => {
     const req = ++requestRef.current;
-    setState({ status: "loading" });
-    if (!dialogRef.current?.open) dialogRef.current?.showModal();
+    if (showLoading) setState({ status: "loading" });
     getContentDetail(contentId)
       .then((res) => {
         if (req !== requestRef.current) return; // 더 최근 요청이 있으면 무시
@@ -260,6 +245,14 @@ export function ContentDetailProvider({ children }: { children: React.ReactNode 
         if (req === requestRef.current) setState({ status: "error", message: "콘텐츠를 불러오지 못했습니다." });
       });
   }, []);
+
+  const open = useCallback(
+    (contentId: string) => {
+      if (!dialogRef.current?.open) dialogRef.current?.showModal();
+      load(contentId, true);
+    },
+    [load],
+  );
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -305,7 +298,7 @@ export function ContentDetailProvider({ children }: { children: React.ReactNode 
               {state.message}
             </p>
           ) : state.status === "ready" ? (
-            <DetailBody d={state.detail} onNavigate={close} />
+            <DetailBody d={state.detail} onNavigate={close} onRefresh={() => load(state.detail.id, false)} />
           ) : null}
           {state.status !== "ready" ? (
             <h2 id="content-detail-title" className="sr-only">

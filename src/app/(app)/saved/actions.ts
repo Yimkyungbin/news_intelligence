@@ -6,6 +6,8 @@ import { authedClient } from "@/lib/auth";
 import { failure, manualContentSchema, savedPostSchema, text } from "@/lib/validation";
 import { splitList } from "@/lib/utils";
 import { detectLanguage } from "@/lib/language";
+import { classify } from "@/lib/collectors/classify";
+import type { TopicForClassify } from "@/lib/collectors/types";
 import type { ActionState } from "@/lib/types";
 
 const uuid = z.uuid();
@@ -84,6 +86,18 @@ export async function addManualContent(_: ActionState, fd: FormData): Promise<Ac
     .select("id")
     .single();
   if (error || !content) return failure("콘텐츠를 등록하지 못했습니다.", fd);
+
+  // 관심 주제 자동 연결 (수집 콘텐츠와 동일한 분류 규칙)
+  const { data: topics } = await supabase.from("topics").select("id,keywords,language").eq("user_id", userId).eq("is_active", true);
+  const matches = classify(
+    { title: v.title, url: v.url, summary: v.summary, author: v.author, publishedAt: null, contentType: "article", popularity: {}, tags: v.tags, language: null },
+    (topics ?? []) as TopicForClassify[],
+  );
+  if (matches.length) {
+    await supabase
+      .from("content_topics")
+      .upsert(matches.map((m) => ({ content_id: content.id, topic_id: m.topicId, relevance_score: m.relevance })), { onConflict: "content_id,topic_id" });
+  }
 
   const { error: saveErr } = await supabase.from("saved_posts").upsert(
     { user_id: userId, content_id: content.id, notes: v.notes, tags: v.tags, folder_id: v.folder_id },

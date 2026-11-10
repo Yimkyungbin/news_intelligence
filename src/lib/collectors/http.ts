@@ -9,13 +9,13 @@ const DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
 
 export class FetchError extends Error {
-  constructor(
-    message: string,
-    readonly status: number | null,
-    readonly retryable: boolean,
-  ) {
+  readonly status: number | null;
+  readonly retryable: boolean;
+  constructor(message: string, status: number | null, retryable: boolean) {
     super(message);
     this.name = "FetchError";
+    this.status = status;
+    this.retryable = retryable;
   }
 }
 

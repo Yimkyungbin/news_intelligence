@@ -121,5 +121,13 @@ export const INFLUENCER_CATEGORIES = [
   "Business Strategy",
 ] as const;
 
-/** Settings에서 선택 가능한 AI 모델 (Phase 3 Provider 구조에서 사용) */
-export const AI_MODELS = ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"] as const;
+/**
+ * Settings에서 선택 가능한 AI 모델 (OpenAI 공식 모델 안내, 2026-11 확인)
+ * 첫 번째가 기본값. DB CHECK 제약(profiles_ai_model_check)과 일치해야 한다.
+ */
+export const AI_MODELS = ["gpt-6-luna", "gpt-6.1-terra", "gpt-6.1-sol"] as const;
+export const AI_MODEL_LABELS: Record<(typeof AI_MODELS)[number], string> = {
+  "gpt-6-luna": "GPT-6 Luna (저비용·대량 처리, 기본)",
+  "gpt-6.1-terra": "GPT-6.1 Terra (균형)",
+  "gpt-6.1-sol": "GPT-6.1 Sol (고품질)",
+};

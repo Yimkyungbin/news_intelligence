@@ -27,17 +27,19 @@ fi
 npm run test:db
 
 step "3/3 E2E 테스트 (npm run test:e2e)"
-if curl -s -o /dev/null -m 5 "$APP_URL/login"; then
-  echo "실행 중인 앱($APP_URL)을 사용합니다."
-else
-  echo "앱이 실행 중이 아니어서 프로덕션 빌드로 기동합니다 (next start)."
-  npx next start -p 3000 >/tmp/lih-verify-server.log 2>&1 &
-  STARTED_PID=$!
-  for _ in $(seq 1 60); do
-    curl -s -o /dev/null -m 2 "$APP_URL/login" && break
-    sleep 1
-  done
+# E2E 는 항상 모의 AI(AI_PROVIDER=mock)로 직접 기동한 서버에서 실행한다.
+# 이미 떠 있는 개발 서버를 재사용하면 실제 OpenAI 키로 호출될 수 있어 거부한다.
+if curl -s -o /dev/null -m 3 "$APP_URL/login"; then
+  echo "포트 3000 에서 앱이 실행 중입니다. E2E 는 모의 AI 서버를 직접 띄워야 하므로 실행 중인 앱(npm run dev 등)을 종료한 뒤 다시 실행하세요." >&2
+  exit 1
 fi
+echo "프로덕션 빌드를 모의 AI 모드로 기동합니다 (AI_PROVIDER=mock next start)."
+AI_PROVIDER=mock npx next start -p 3000 >/tmp/lih-verify-server.log 2>&1 &
+STARTED_PID=$!
+for _ in $(seq 1 60); do
+  curl -s -o /dev/null -m 2 "$APP_URL/login" && break
+  sleep 1
+done
 npm run test:e2e
 
 printf '\n모든 검증을 통과했습니다.\n'

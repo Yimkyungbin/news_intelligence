@@ -11,10 +11,15 @@ import { CollectionChart } from "@/components/dashboard/collection-chart";
 import { TopicUpdateList, type TopicUpdate } from "@/components/dashboard/topic-update-list";
 import { SourceBadge } from "@/components/sources/source-badge";
 import { InfoTip } from "@/components/info-tip";
+import { BriefingSummary } from "@/components/briefing/briefing-view";
+import { GenerateBriefingButton } from "@/components/briefing/ai-buttons";
+import type { BriefingContent } from "@/lib/briefing/compose";
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState } from "@/components/ui/primitives";
 import type { ContentItem } from "@/lib/types";
 
 export const metadata = { title: "Dashboard" };
+// 브리핑 수동 생성(Server Action) 실행 시간 상한
+export const maxDuration = 300;
 
 /* ---------- 항목 설명 (InfoTip) ---------- */
 const HELP = {
@@ -35,8 +40,9 @@ const HELP = {
     "아래 로고는 최근 7일 출처별 건수입니다.",
   ],
   briefing: [
-    "매일 07:00 KST에 AI가 오늘의 주요 트렌드·신규 콘텐츠·주제별 변화를 정리합니다 (Phase 3에서 제공).",
-    "AI 처리 권한이 확인된 콘텐츠만 사용하며, 권한이 없는 콘텐츠는 외부 AI로 보내지 않습니다.",
+    "매일 07:00 KST에 최근 24시간 콘텐츠를 정리합니다: 트렌드 TOP 5, 신규 콘텐츠 TOP 10, 주제별 업데이트, 인플루언서 콘텐츠, AI 핵심 인사이트, 전일 대비 변화.",
+    "AI 핵심 인사이트만 AI가 만들며, AI 처리 권한이 확인된 콘텐츠만 사용합니다. 나머지 섹션은 집계 결과입니다.",
+    "'지금 생성'으로 직접 만들 수도 있습니다 (10분에 1회).",
   ],
   top: [
     "출처가 직접 제공한 인기 지표로 순위를 매깁니다 (Hacker News points, GitHub stars, Hugging Face likes).",
@@ -333,27 +339,30 @@ export default async function DashboardPage() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-1.5">
-              <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" /> AI Daily Briefing
-              <Help label="AI Daily Briefing" lines={HELP.briefing} align="right" />
-            </CardTitle>
-            <CardDescription>매일 07:00 KST 생성 예정</CardDescription>
+          <CardHeader className="flex-row items-start justify-between gap-2">
+            <div>
+              <CardTitle className="flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" /> AI Daily Briefing
+                <Help label="AI Daily Briefing" lines={HELP.briefing} align="right" />
+              </CardTitle>
+              <CardDescription>
+                {briefingRes.data ? `${formatDate(briefingRes.data.briefing_date)} · 생성 ${formatDateTime(briefingRes.data.generated_at)}` : "매일 07:00 KST 자동 생성"}
+              </CardDescription>
+            </div>
+            {briefingRes.data ? <SectionLink href="/briefing" /> : null}
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-col gap-3">
             {briefingRes.data ? (
-              <div className="text-sm">
-                <p className="text-xs text-muted-foreground">
-                  {formatDate(briefingRes.data.briefing_date)} · 생성 {formatDateTime(briefingRes.data.generated_at)}
-                </p>
-                {briefingRes.data.is_demo ? <Badge variant="demo">DEMO DATA</Badge> : null}
-              </div>
+              <>
+                {briefingRes.data.is_demo ? <Badge variant="demo" className="self-start">DEMO 포함</Badge> : null}
+                <BriefingSummary b={briefingRes.data.content as BriefingContent} />
+              </>
             ) : (
-              <EmptyState
-                title="아직 생성된 브리핑이 없습니다"
-                description="AI 브리핑은 Phase 3에서 활성화됩니다. AI 처리가 허용된 콘텐츠만 사용합니다."
-              />
+              <EmptyState title="아직 생성된 브리핑이 없습니다" description="지금 생성하거나 다음 자동 생성(07:00 KST)을 기다려 주세요." />
             )}
+            <div className="self-end">
+              <GenerateBriefingButton label={briefingRes.data ? "다시 생성" : "지금 생성"} />
+            </div>
           </CardContent>
         </Card>
       </div>
