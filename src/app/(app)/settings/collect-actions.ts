@@ -40,7 +40,7 @@ export async function collectNow(): Promise<ActionState> {
   try {
     const summary = await runCollection({ userId, trigger: "manual" });
     await refreshDailyStats(userId, 3);
-    await processSystemAI({ maxItems: 30 });
+    await processSystemAI({ maxItems: 50, skipMock: true });
     revalidatePath("/", "layout");
     const stored = summary.sources.reduce((n, s) => n + s.stored, 0);
     const failed = summary.sources.filter((s) => s.status === "failed").length;

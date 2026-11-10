@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { generateContentSummary, setAIConsent } from "@/app/(app)/ai/actions";
@@ -31,6 +31,17 @@ export function ContentAISection({ d, onChanged }: { d: ContentDetail; onChanged
       else if (res) toast.error(res.message);
       onChanged();
     });
+
+  // AI 처리가 허용됐고 아직 요약이 없으면 상세 보기를 열 때 자동 생성 (콘텐츠당 1회)
+  const autoRan = useRef<string | null>(null);
+  const shouldAuto = d.ai_processing_allowed && !insight && d.ai_processing_status !== "failed" && d.ai_processing_status !== "processing";
+  useEffect(() => {
+    if (!shouldAuto || autoRan.current === d.id) return;
+    autoRan.current = d.id;
+    run(() => generateContentSummary(d.id));
+    // run 은 매 렌더 새로 만들어지지만 콘텐츠 id 기준으로 1회만 실행
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [d.id, shouldAuto]);
 
   return (
     <section className="flex flex-col gap-2" aria-labelledby="ai-section-title">
@@ -81,10 +92,12 @@ export function ContentAISection({ d, onChanged }: { d: ContentDetail; onChanged
           {d.ai_processing_allowed
             ? d.ai_processing_status === "failed"
               ? "이전 AI 처리에 실패했습니다. 다시 생성해 보세요."
-              : "AI 처리가 허용된 콘텐츠입니다. 아직 요약이 생성되지 않았습니다."
+              : pending
+                ? "AI 요약을 생성하고 있습니다..."
+                : "AI 처리가 허용된 콘텐츠입니다. 아직 요약이 생성되지 않았습니다."
             : consentable
               ? "직접 등록한 콘텐츠는 권리를 확인한 경우에만 AI로 처리합니다."
-              : "이 콘텐츠는 출처의 AI 처리 권한이 확인되지 않아 AI 요약을 실행하지 않습니다. 외부 AI로 전송되지 않습니다."}
+              : "이 출처는 아직 AI 번역·요약이 허용되지 않았습니다. 운영자가 Settings에서 'AI 번역·요약'을 허용하면 상세 보기를 열 때 AI 요약이 자동으로 생성됩니다."}
         </p>
       )}
 

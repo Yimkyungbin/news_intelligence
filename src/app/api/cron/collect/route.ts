@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     // 수집 후 일자별 통계(최근 3일) 갱신 + 2년 지난 통계 삭제
     const stats = await refreshAllStats();
     // 운영자가 허용한 출처의 번역·한 줄 시사점 생성 (하루 100회 한도)
-    const ai = await processSystemAI();
+    const ai = await processSystemAI({ skipMock: true });
     return NextResponse.json({ ok: true, ...summary, stats, ai: { processed: ai.processed, calls: ai.calls } });
   } catch (e) {
     console.error("[cron/collect] failed", e instanceof Error ? e.message : "unknown");

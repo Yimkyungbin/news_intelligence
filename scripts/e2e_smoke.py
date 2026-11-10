@@ -24,6 +24,16 @@ SHOTS = "/tmp/lih-e2e"
 
 results: list[tuple[str, bool, str]] = []
 
+# 테스트 고정 데이터 (slug, 제목, URL, 유형, 인기 지표, 키워드, 몇 시간 전, 연결 주제)
+FIXTURES = [
+    ("hacker-news", "Enterprise agentic AI adoption checklist", "https://news.ycombinator.com/item?id=990001", "discussion", '{"points": 120, "comments": 30}',
+     ["agentic ai", "enterprise ai"], 3, ["Agentic AI", "Enterprise AI Platform"]),
+    ("arxiv", "RAG evaluation methods survey", "https://arxiv.org/abs/2611.99001", "paper", "{}",
+     ["rag", "evaluation"], 30, ["RAG / Knowledge Management", "MLOps / LLMOps"]),
+    ("hugging-face", "Open-weight model release roundup", "https://huggingface.co/e2e/open-model", "model", '{"likes": 50}',
+     ["llm", "open weight"], 6, ["LLM / Open-weight Models"]),
+]
+
 
 def check(name: str, fn):
     try:
@@ -103,18 +113,38 @@ def run():
 
         check("메일 인증 링크 → 로그인 → 대시보드", confirm)
 
+        def seed_fixtures():
+            # 예시 데이터가 없으므로 테스트용 수집 콘텐츠를 직접 넣음 (계정 삭제 시 함께 삭제)
+            uid = sql(f"select id from public.profiles where email = '{EMAIL}'")
+            for slug, title, url, ctype, pop, kws, hours, topics in FIXTURES:
+                sql(
+                    "insert into public.content_items (user_id, source_id, title, summary, original_url, source_name, source_type, "
+                    "published_at, language, content_type, keywords, popularity, provenance, permission_status, storage_allowed, display_allowed) "
+                    f"select '{uid}', id, '{title}', 'Fixture summary for {title}.', '{url}', name, source_type, now() - interval '{hours} hours', "
+                    f"'en', '{ctype}', array[{','.join(repr(k) for k in kws)}], '{pop}'::jsonb, 'collected', 'NOT_VERIFIED', true, true "
+                    f"from public.data_sources where slug = '{slug}' and user_id is null"
+                )
+                sql(
+                    "insert into public.content_topics (content_id, topic_id, relevance_score) "
+                    f"select c.id, t.id, 1 from public.content_items c join public.topics t on t.user_id = c.user_id "
+                    f"where c.original_url = '{url}' and c.user_id = '{uid}' and t.name in ({','.join(repr(t) for t in topics)})"
+                )
+            assert sql(f"select count(*) from public.content_items where user_id = '{uid}'") == str(len(FIXTURES))
+
+        check("테스트 고정 데이터 준비 (예시 데이터 없음 확인)", seed_fixtures)
+
         def dashboard():
             expect(page.get_by_text("Daily Top 10")).to_be_visible()
             expect(page.get_by_text("Weekly Top 10")).to_be_visible()
             expect(page.get_by_text("My Topics Update")).to_be_visible()
-            expect(page.get_by_text("일부 콘텐츠는 DEMO DATA입니다")).to_be_visible()
+            expect(page.get_by_text("DEMO DATA")).to_have_count(0)
             expect(page.locator("text=Agentic AI").first).to_be_visible()
             page.screenshot(path=f"{SHOTS}/dashboard.png", full_page=True)
 
-        check("대시보드 위젯 + DEMO 표시 + 시드 주제", dashboard)
+        check("대시보드 위젯 + 예시 데이터 없음 + 시드 주제", dashboard)
 
         def dashboard_insights():
-            demo_title = "[DEMO] 엔터프라이즈 Agentic AI 도입 체크리스트"
+            demo_title = "Enterprise agentic AI adoption checklist"
             page.goto(f"{BASE}/")
 
             # 1) 항목 설명: ⓘ 버튼 → 설명 팝오버, Esc 로 닫힘
@@ -131,9 +161,9 @@ def run():
             page.get_by_role("button", name=demo_title).first.click()
             dialog = page.get_by_role("dialog", name=demo_title)
             expect(dialog).to_be_visible()
-            expect(dialog.get_by_text("요약 (DEMO 예시)")).to_be_visible()
+            expect(dialog.get_by_text("요약 (출처 제공 원문 일부)")).to_be_visible()
             expect(dialog.get_by_text("데이터 권한")).to_be_visible()
-            expect(dialog.get_by_text("AI 처리 권한이 확인되지 않아")).to_be_visible()
+            expect(dialog.get_by_text(re.compile("AI 번역·요약이 허용되지 않았습니다"))).to_be_visible()
             expect(dialog.get_by_role("link", name="원문 열기")).to_have_attribute("href", re.compile(r"news\.ycombinator\.com"))
             expect(dialog.get_by_role("link", name="Agentic AI", exact=True)).to_be_visible()
             page.screenshot(path=f"{SHOTS}/dashboard-detail.png")
@@ -286,10 +316,10 @@ def run():
             page.get_by_role("button", name="등록 및 저장").click()
             expect(page.get_by_role("button", name="RAG 실무 적용 사례")).to_be_visible()
             expect(page.locator("article")).to_have_count(2)
-            # 출처 로고: LinkedIn 링크 → LinkedIn 로고, DEMO 콘텐츠 → DEMO 로고
+            # 출처 로고: LinkedIn 링크 → LinkedIn 로고, 수집 콘텐츠 → 출처 로고
             art = page.locator("article", has=page.get_by_role("button", name="RAG 실무 적용 사례"))
             expect(art.get_by_role("img", name="LinkedIn 로고")).to_be_visible()
-            expect(page.get_by_role("img", name="DEMO DATA 로고").first).to_be_visible()
+            expect(page.get_by_role("img", name="Hacker News 로고").first).to_be_visible()
             # 메모 편집 + KB 추가
             art.get_by_role("button", name="메모·태그 편집").click()
             art.locator("textarea[name=notes]").fill("핵심: 하이브리드 검색")
@@ -365,10 +395,10 @@ def run():
             dialog.get_by_label(re.compile("외부 AI\\(OpenAI\\)로 보내 요약할 권리")).check()
             allow.click()
             expect(page.get_by_text("AI 처리를 허용했습니다.")).to_be_visible()
-            assert sql(f"select ai_processing_allowed::text || ai_processing_status from public.content_items where id = '{cid}'") == "truepending"
+            # 허용 직후 자동 요약이 바로 시작되므로 상태(pending/processing/completed)가 아닌 허용 여부만 확인
+            assert sql(f"select ai_processing_allowed::text from public.content_items where id = '{cid}'") == "true"
 
-            # 2) AI 요약 생성 (모의 AI → DEMO 표시)
-            dialog.get_by_role("button", name="AI 요약 생성").click()
+            # 2) AI 요약: 허용 직후 자동 생성 (모의 AI → DEMO 표시)
             expect(page.get_by_text("DEMO 모의 AI 요약을 생성했습니다.")).to_be_visible(timeout=30000)
             expect(dialog.get_by_text(re.compile(r"^\[DEMO 요약\]"))).to_be_visible()
             expect(dialog.get_by_text("DEMO 모의 AI")).to_be_visible()
@@ -376,11 +406,11 @@ def run():
             assert sql(f"select provider || ':' || is_demo::text from public.ai_insights where content_id = '{cid}'") == "mock:true"
             page.keyboard.press("Escape")
 
-            # 3) 권한 없는 콘텐츠(DEMO)는 동의 옵션 없이 차단 안내만
+            # 3) 운영자가 허용하지 않은 수집 콘텐츠는 동의 옵션 없이 안내만
             page.goto(f"{BASE}/trending?period=monthly&limit=50")
-            page.get_by_role("button", name="[DEMO] 엔터프라이즈 Agentic AI 도입 체크리스트").first.click()
-            demo_dialog = page.get_by_role("dialog", name="[DEMO] 엔터프라이즈 Agentic AI 도입 체크리스트")
-            expect(demo_dialog.get_by_text("출처의 AI 처리 권한이 확인되지 않아")).to_be_visible()
+            page.get_by_role("button", name="Enterprise agentic AI adoption checklist").first.click()
+            demo_dialog = page.get_by_role("dialog", name="Enterprise agentic AI adoption checklist")
+            expect(demo_dialog.get_by_text(re.compile("AI 번역·요약이 허용되지 않았습니다"))).to_be_visible()
             expect(demo_dialog.get_by_role("button", name="AI 처리 허용", exact=True)).to_have_count(0)
             expect(demo_dialog.get_by_role("button", name="AI 요약 생성")).to_have_count(0)
             page.keyboard.press("Escape")
@@ -429,19 +459,19 @@ def run():
         check("Phase 3 AI: 동의·요약·주제 인사이트·브리핑·철회 (모의 AI)", phase3_ai)
 
         def sources_stats_insights():
-            demo_title = "[DEMO] 엔터프라이즈 Agentic AI 도입 체크리스트"
+            demo_title = "Enterprise agentic AI adoption checklist"
 
-            # 1) 소스 on/off: DEMO DATA 를 끄면 피드에서 숨김, 다시 켜면 복원
+            # 1) 소스 on/off: Hacker News 를 끄면 피드에서 숨김, 다시 켜면 복원
             page.goto(f"{BASE}/settings")
-            page.get_by_role("switch", name="DEMO DATA 끄기").click()
-            expect(page.get_by_text("'DEMO DATA'을(를) 껐습니다.", exact=False)).to_be_visible(timeout=60000)
+            page.get_by_role("switch", name="Hacker News 끄기").click()
+            expect(page.get_by_text("'Hacker News'을(를) 껐습니다.", exact=False)).to_be_visible(timeout=60000)
             page.goto(f"{BASE}/trending?period=monthly&limit=50")
             expect(page.get_by_role("button", name=demo_title)).to_have_count(0)
             page.goto(f"{BASE}/")
             expect(page.get_by_role("button", name=demo_title)).to_have_count(0)
             page.goto(f"{BASE}/settings")
-            page.get_by_role("switch", name="DEMO DATA 켜기").click()
-            expect(page.get_by_text("'DEMO DATA'을(를) 켰습니다.", exact=False)).to_be_visible(timeout=60000)
+            page.get_by_role("switch", name="Hacker News 켜기").click()
+            expect(page.get_by_text("'Hacker News'을(를) 켰습니다.", exact=False)).to_be_visible(timeout=60000)
             page.goto(f"{BASE}/trending?period=monthly&limit=50")
             expect(page.get_by_role("button", name=demo_title).first).to_be_visible()
 
@@ -464,18 +494,22 @@ def run():
             # 3) 운영자 AI 허용(정책 B) → 번역·시사점(모의 AI) → 번역 토글 → 트렌드 AI 시사점 → 차단 복원
             url = "https://techcrunch.com/e2e-agent-framework"
             title = "OpenAI ships new agent framework for enterprises"
-            # 사전 상태 고정: 이전 실행이 중단되어 허용 상태가 남아 있어도 차단 상태에서 시작
-            src = "(select id from public.data_sources where slug = 'techcrunch-ai' and user_id is null)"
-            sql(f"update public.data_sources set ai_processing_allowed = false, external_llm_allowed = false where id = {src}")
-            sql(f"update public.content_items set ai_processing_allowed = false, external_llm_allowed = false, ai_processing_status = 'blocked' where source_id = {src} and provenance = 'collected'")
-            sql(f"delete from public.content_ai_cache where source_id = {src}")
+            # 테스트 전용 시스템 소스 (실제 소스의 운영자 설정·번역 캐시를 건드리지 않음)
+            sql("delete from public.data_sources where slug = 'e2e-ai-source' and user_id is null")
+            sql(
+                "insert into public.data_sources (slug, name, source_type, source_url, homepage_url, logo_key, connection_status, "
+                "permission_status, storage_allowed, display_allowed, retention_days, is_active) values "
+                "('e2e-ai-source', 'E2E AI Source', 'news', 'http://127.0.0.1:9/none.xml', 'https://techcrunch.com', 'techcrunch', "
+                "'connected', 'NOT_VERIFIED', true, true, 30, false)"
+            )
+            src = "(select id from public.data_sources where slug = 'e2e-ai-source' and user_id is null)"
             uid = sql(f"select id from public.profiles where email = '{EMAIL}'")
             sql(
                 "insert into public.content_items (user_id, source_id, title, summary, original_url, source_name, source_type, "
                 "published_at, language, content_type, keywords, provenance, permission_status, storage_allowed, display_allowed) "
                 f"select '{uid}', id, '{title}', 'A new framework for building agentic AI apps.', '{url}', name, source_type, "
                 "now() - interval '2 hours', 'en', 'article', array['agentic ai'], 'collected', 'NOT_VERIFIED', true, true "
-                "from public.data_sources where slug = 'techcrunch-ai' and user_id is null"
+                "from public.data_sources where slug = 'e2e-ai-source' and user_id is null"
             )
             sql(
                 "insert into public.content_topics (content_id, topic_id, relevance_score) "
@@ -484,8 +518,8 @@ def run():
             )
             try:
                 page.goto(f"{BASE}/settings")
-                page.get_by_role("switch", name="TechCrunch AI AI 번역·요약 허용").click()
-                expect(page.get_by_text(re.compile("'TechCrunch AI'의 AI 번역·요약을 허용했습니다"))).to_be_visible(timeout=60000)
+                page.get_by_role("switch", name="E2E AI Source AI 번역·요약 허용").click()
+                expect(page.get_by_text(re.compile("'E2E AI Source'의 AI 번역·요약을 허용했습니다"))).to_be_visible(timeout=60000)
                 assert sql(f"select provider || ':' || is_demo::text from public.content_ai_cache where original_url = '{url}'") == "mock:true"
 
                 page.goto(f"{BASE}/trending?period=weekly&limit=50")
@@ -515,11 +549,11 @@ def run():
             finally:
                 # 차단 복원 → 번역·시사점 삭제
                 page.goto(f"{BASE}/settings")
-                sw = page.get_by_role("switch", name="TechCrunch AI AI 번역·요약 차단")
+                sw = page.get_by_role("switch", name="E2E AI Source AI 번역·요약 차단")
                 try:
                     sw.wait_for(timeout=10000)
                     sw.click()
-                    expect(page.get_by_text(re.compile("'TechCrunch AI'의 AI 처리를 차단하고"))).to_be_visible(timeout=60000)
+                    expect(page.get_by_text(re.compile("'E2E AI Source'의 AI 처리를 차단하고"))).to_be_visible(timeout=60000)
                 except Exception:
                     # UI 정리에 실패해도 공유 로컬 DB 상태는 반드시 원복
                     sql(f"update public.data_sources set ai_processing_allowed = false, external_llm_allowed = false where id = {src}")
@@ -527,7 +561,8 @@ def run():
                     sql(f"delete from public.content_ai_cache where source_id = {src}")
                     raise
             assert sql(f"select count(*) from public.content_ai_cache where original_url = '{url}'") == "0"
-            assert sql("select ai_processing_allowed::text from public.data_sources where slug = 'techcrunch-ai' and user_id is null") == "false"
+            assert sql("select ai_processing_allowed::text from public.data_sources where slug = 'e2e-ai-source' and user_id is null") == "false"
+            sql("delete from public.data_sources where slug = 'e2e-ai-source' and user_id is null")
 
         check("소스 on/off·Statistics·운영자 AI 허용·번역 토글·트렌드 시사점", sources_stats_insights)
 

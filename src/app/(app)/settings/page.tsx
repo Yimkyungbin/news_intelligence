@@ -3,6 +3,7 @@ import { ActionButton, ConfirmButton } from "@/components/confirm-button";
 import { AddFeedForm, CollectNowButton } from "./collect-forms";
 import { deleteUserFeed, setUserFeedActive } from "./collect-actions";
 import { SourceToggle } from "./source-toggle";
+import { BulkAIButtons } from "./bulk-ai-buttons";
 import { getDisabledSourceIds } from "@/lib/source-settings";
 import { isAdminEmail } from "@/lib/admin";
 import { requireUser } from "@/lib/auth";
@@ -65,6 +66,7 @@ export default async function SettingsPage() {
   ]);
   const disabled = new Set(await getDisabledSourceIds(user.id));
   const admin = isAdminEmail(user.email);
+  const aiEligible = ((allSources ?? []) as DataSource[]).filter((s) => s.user_id === null && !["linkedin_api", "user_provided", "demo"].includes(s.source_type));
   // 정렬: 수집 소스(유형별) → 직접 입력·DEMO → LinkedIn
   const TYPE_ORDER = ["news", "official_blog", "rss", "public_api", "social_api", "demo", "user_provided", "linkedin_api"];
   const sources = ((allSources ?? []) as DataSource[])
@@ -104,7 +106,13 @@ export default async function SettingsPage() {
               수집처별 사용 여부(내 계정 기준)·로고·권한 상태·허용 처리 범위. 끈 소스는 수집하지 않고 피드에서 숨깁니다(저장한 글은 유지). 상태 기준은 docs/api-feasibility-matrix.md (AVAILABLE / CONDITIONAL / UNAVAILABLE / NOT_VERIFIED)
             </CardDescription>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
+          <CardContent className="flex flex-col gap-3 overflow-x-auto">
+            {admin ? (
+              <BulkAIButtons
+                allowedCount={aiEligible.filter((s) => s.ai_processing_allowed).length}
+                total={aiEligible.length}
+              />
+            ) : null}
             <table className="w-full min-w-[820px] text-left text-xs" aria-label="데이터 소스 목록">
               <thead className="text-muted-foreground">
                 <tr className="border-b">

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { authedClient, requireUser } from "@/lib/auth";
 import { refreshDailyStats } from "@/lib/stats/service";
 import { isAdminEmail } from "@/lib/admin";
-import { setSystemSourceAIPermission } from "@/lib/ai/system";
+import { setAllSystemSourcesAIPermission, setSystemSourceAIPermission } from "@/lib/ai/system";
 import type { ActionState } from "@/lib/types";
 
 /** 사용자별 데이터 소스 켜기/끄기 (요구사항 1). 권한 확인은 RLS 정책(uss_insert)에서도 수행 */
@@ -37,6 +37,16 @@ export async function setSourceAIAllowed(sourceId: string, allowed: boolean): Pr
   const user = await requireUser();
   if (!isAdminEmail(user.email)) return { ok: false, message: "운영자만 변경할 수 있습니다." };
   const res = await setSystemSourceAIPermission(id.data, allowed);
+  if (res.ok) revalidatePath("/", "layout");
+  return res;
+}
+
+/** 운영자 전용: 모든 시스템 소스 AI 번역·요약 일괄 허용/차단 */
+export async function setAllSourcesAIAllowed(allowed: boolean): Promise<ActionState> {
+  if (typeof allowed !== "boolean") return { ok: false, message: "잘못된 요청입니다." };
+  const user = await requireUser();
+  if (!isAdminEmail(user.email)) return { ok: false, message: "운영자만 변경할 수 있습니다." };
+  const res = await setAllSystemSourcesAIPermission(allowed);
   if (res.ok) revalidatePath("/", "layout");
   return res;
 }

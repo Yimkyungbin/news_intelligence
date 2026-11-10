@@ -11,7 +11,9 @@ import { getProvider } from "./provider";
  * - URL 기준 캐시(content_ai_cache)로 사용자 간 재사용
  * - 하루 100회 호출 제한, 실행 이력 collection_logs(job_type=system_ai, user_id 없음)
  */
-export const SYSTEM_AI_DAILY_LIMIT = 100;
+export const SYSTEM_AI_DAILY_LIMIT = 300;
+/** AI 허용을 바꿀 수 없는 소스 유형 */
+const LOCKED_TYPES = ["linkedin_api", "user_provided", "demo"];
 const WINDOW_DAYS = 7;
 
 type Row = {
@@ -28,11 +30,15 @@ type Row = {
   external_llm_allowed: boolean;
 };
 
-export async function processSystemAI(opts: { maxItems?: number; sourceId?: string } = {}): Promise<{ processed: number; calls: number; message: string }> {
+export async function processSystemAI(
+  opts: { maxItems?: number; sourceId?: string; sourceIds?: string[]; skipMock?: boolean } = {},
+): Promise<{ processed: number; calls: number; message: string }> {
   const db = createAdminClient();
   if (!db) return { processed: 0, calls: 0, message: "SUPABASE_SECRET_KEY 미설정" };
   const p = getProvider(null);
   if (!p) return { processed: 0, calls: 0, message: "AI 기능이 비활성화되어 있습니다." };
+  // 수집 후 자동 처리에서는 모의 AI 결과(DEMO)를 공유 캐시에 남기지 않음
+  if (opts.skipMock && p.isDemo) return { processed: 0, calls: 0, message: "모의 AI 모드에서는 자동 번역을 건너뜁니다." };
 
   const { count: usedToday } = await db
     .from("collection_logs")
@@ -56,6 +62,7 @@ export async function processSystemAI(opts: { maxItems?: number; sourceId?: stri
     .order("collected_at", { ascending: false })
     .limit(1000);
   if (opts.sourceId) q = q.eq("source_id", opts.sourceId);
+  if (opts.sourceIds?.length) q = q.in("source_id", opts.sourceIds);
   const { data } = await q;
 
   const uniq = new Map<string, Row>();
@@ -118,7 +125,7 @@ export async function setSystemSourceAIPermission(sourceId: string, allowed: boo
   if (!db) return { ok: false, message: "SUPABASE_SECRET_KEY 미설정" };
   const { data: s } = await db.from("data_sources").select("id,name,user_id,source_type").eq("id", sourceId).maybeSingle();
   if (!s || s.user_id !== null) return { ok: false, message: "시스템 소스만 변경할 수 있습니다." };
-  if (["linkedin_api", "user_provided", "demo"].includes(s.source_type as string)) return { ok: false, message: "이 소스는 AI 허용을 변경할 수 없습니다." };
+  if (LOCKED_TYPES.includes(s.source_type as string)) return { ok: false, message: "이 소스는 AI 허용을 변경할 수 없습니다." };
 
   const { error } = await db.from("data_sources").update({ ai_processing_allowed: allowed, external_llm_allowed: allowed }).eq("id", sourceId);
   if (error) return { ok: false, message: "변경하지 못했습니다." };
@@ -138,4 +145,31 @@ export async function setSystemSourceAIPermission(sourceId: string, allowed: boo
   // 허용 직후 최근 콘텐츠 일부를 바로 처리 (나머지는 다음 수집 때)
   const run = await processSystemAI({ sourceId, maxItems: 20 });
   return { ok: true, message: `'${s.name}'의 AI 번역·요약을 허용했습니다. ${run.message}` };
+}
+
+/** 운영자: 모든 시스템 소스의 AI 번역·요약을 한 번에 허용/차단 (허용 시 최근 콘텐츠 번역·시사점까지 실행) */
+export async function setAllSystemSourcesAIPermission(allowed: boolean): Promise<{ ok: boolean; message: string }> {
+  const db = createAdminClient();
+  if (!db) return { ok: false, message: "SUPABASE_SECRET_KEY 미설정" };
+  const { data: sources } = await db.from("data_sources").select("id,source_type").is("user_id", null);
+  const ids = (sources ?? []).filter((s) => !LOCKED_TYPES.includes(s.source_type as string)).map((s) => s.id as string);
+  if (ids.length === 0) return { ok: false, message: "변경할 소스가 없습니다." };
+
+  const { error } = await db.from("data_sources").update({ ai_processing_allowed: allowed, external_llm_allowed: allowed }).in("id", ids);
+  if (error) return { ok: false, message: "변경하지 못했습니다." };
+  await db
+    .from("content_items")
+    .update({ ai_processing_allowed: allowed, external_llm_allowed: allowed, ai_processing_status: allowed ? "pending" : "blocked" })
+    .in("source_id", ids)
+    .eq("provenance", "collected");
+
+  if (!allowed) {
+    await db.from("content_ai_cache").delete().in("source_id", ids);
+    const { data: rows } = await db.from("content_items").select("id").in("source_id", ids).eq("provenance", "collected").limit(20000);
+    const list = (rows ?? []).map((r) => r.id as string);
+    for (let i = 0; i < list.length; i += 200) await db.from("ai_insights").delete().in("content_id", list.slice(i, i + 200));
+    return { ok: true, message: `소스 ${ids.length}개의 AI 번역·요약을 차단하고 AI 결과를 삭제했습니다.` };
+  }
+  const run = await processSystemAI({ sourceIds: ids, maxItems: 150 });
+  return { ok: true, message: `소스 ${ids.length}개의 AI 번역·요약을 허용했습니다. ${run.message}` };
 }
