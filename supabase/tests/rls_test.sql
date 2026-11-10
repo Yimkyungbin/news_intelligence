@@ -138,6 +138,56 @@ begin
     assert sqlerrm <> 'SHOULD_NOT_REACH', 'client must not call purge_expired_content';
   end;
   raise notice 'PASS purge function: not callable by clients';
+
+  -- ===== Phase 3 =====
+  -- 13) 클라이언트는 AI 결과(주제 인사이트)·브리핑을 직접 만들 수 없음
+  begin
+    insert into public.topic_insights (user_id, topic_id, content, model_name, provider)
+      select '00000000-0000-0000-0000-00000000000a', id, '{}'::jsonb, 'x', 'openai' from public.topics limit 1;
+    raise exception 'SHOULD_NOT_REACH';
+  exception when others then
+    assert sqlerrm <> 'SHOULD_NOT_REACH', 'client must not insert topic_insights';
+  end;
+  begin
+    insert into public.daily_briefings (user_id, briefing_date, content)
+      values ('00000000-0000-0000-0000-00000000000a', current_date, '{"fake":true}');
+    raise exception 'SHOULD_NOT_REACH';
+  exception when others then
+    assert sqlerrm <> 'SHOULD_NOT_REACH', 'client must not insert daily_briefings';
+  end;
+  raise notice 'PASS AI results: clients cannot forge topic insights or briefings';
+
+  -- 14) 지원하지 않는 AI 모델 값 거부
+  begin
+    update public.profiles set ai_model = 'gpt-4o-mini' where id = '00000000-0000-0000-0000-00000000000a';
+    raise exception 'SHOULD_NOT_REACH';
+  exception when others then
+    assert sqlerrm <> 'SHOULD_NOT_REACH', 'unsupported ai_model must be rejected';
+  end;
+  select count(*) into n from public.profiles where id = '00000000-0000-0000-0000-00000000000a' and ai_model = 'gpt-6-luna';
+  assert n = 1, 'default ai_model should be gpt-6-luna';
+  raise notice 'PASS ai_model: default gpt-6-luna, unsupported values rejected';
+end $$;
+
+-- 15) 주제 인사이트·브리핑은 본인 것만 조회
+reset role;
+insert into public.topic_insights (id, user_id, topic_id, content, model_name, provider)
+  select '00000000-0000-0000-0000-0000000000d1', user_id, id, '{"overview":"b"}', 'm', 'mock' from public.topics
+  where user_id = '00000000-0000-0000-0000-00000000000b' limit 1;
+insert into public.daily_briefings (id, user_id, briefing_date, content)
+  values ('00000000-0000-0000-0000-0000000000d2', '00000000-0000-0000-0000-00000000000b', current_date, '{}');
+set local role authenticated;
+do $$
+declare n int;
+begin
+  select count(*) into n from public.topic_insights where id = '00000000-0000-0000-0000-0000000000d1';
+  assert n = 0, 'A must not see B topic insights';
+  select count(*) into n from public.daily_briefings where id = '00000000-0000-0000-0000-0000000000d2';
+  assert n = 0, 'A must not see B briefings';
+  update public.daily_briefings set content = '{"hijack":true}' where id = '00000000-0000-0000-0000-0000000000d2';
+  get diagnostics n = row_count;
+  assert n = 0, 'A must not update B briefing';
+  raise notice 'PASS AI results isolation: topic insights and briefings per user';
 end $$;
 
 -- 12) 시스템 작업(cron) 이력은 모든 사용자가 조회 가능, 다른 사용자의 수동 작업 이력은 불가

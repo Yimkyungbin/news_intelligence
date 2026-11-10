@@ -1,6 +1,6 @@
 # LinkedIn Intelligence Hub
 
-개인화 AI 지식·트렌드 인텔리전스 플랫폼 (MVP Phase 1 + Phase 2 콘텐츠 수집)
+개인화 AI 지식·트렌드 인텔리전스 플랫폼 (MVP Phase 1~3: 기본 서비스 · 콘텐츠 수집 · AI 분석)
 
 > LinkedIn과 제휴하지 않은 독립 서비스입니다. LinkedIn 데이터 수집을 전제로 하지 않으며, 모든 콘텐츠를 출처·권한 메타데이터와 함께 관리합니다. 근거는 [docs/api-feasibility-matrix.md](docs/api-feasibility-matrix.md)에 정리했습니다.
 
@@ -11,7 +11,7 @@ Browser ──HTTPS──> Vercel (Next.js 16 App Router)
                      ├─ proxy.ts            세션 갱신 + 미인증 차단
                      ├─ Server Components   조회 (사용자 세션 + RLS)
                      ├─ Server Actions      CRUD (zod 검증 → Supabase)
-                     └─ Route Handlers: /api/cron/collect (매일 06:00 KST, CRON_SECRET)
+                     └─ Route Handlers: /api/cron/collect (06:00 KST), /api/cron/briefing (07:00 KST), CRON_SECRET
                               │
                               ▼
                     Supabase Cloud
@@ -19,7 +19,7 @@ Browser ──HTTPS──> Vercel (Next.js 16 App Router)
                      ├─ PostgreSQL + RLS (user_id 격리)
                      └─ 권한 트리거 (AI 처리 플래그 보호)
      수집기(src/lib/collectors): RSS·Atom / HN / GitHub / arXiv / HF → 주제 분류 → content_items
-     (Phase 3) AIProvider(OpenAI, 교체 가능) ← ai_processing_allowed 콘텐츠만
+     AI(src/lib/ai): 권한 게이트 → Provider(OpenAI Responses API | 모의 AI) → ai_insights / topic_insights / daily_briefings
 ```
 
 | 영역 | 기술 |
@@ -107,7 +107,7 @@ npm run dev                     # http://localhost:3000
 ```
 
 - 인증 메일 확인: Mailpit http://127.0.0.1:54324
-- 전체 검증: `npm run verify:full` (= `verify`[typecheck·lint·test:unit·build] → `test:db` → `test:e2e`)
+- 전체 검증: `npm run verify:full` (= `verify`[check:secrets·typecheck·lint·test:unit·build] → `test:db` → `test:e2e`). E2E 는 모의 AI 서버를 직접 띄우므로 `npm run dev` 를 먼저 종료하세요.
 - 단위 테스트: `npm run test:unit` (Node 내장 테스트 러너, `tests/unit`)
 - E2E 최초 1회: `uv run --with playwright==1.55.0 python -m playwright install chromium`
 - 수동 수집: Settings > 콘텐츠 수집 > 지금 수집 (10분에 1회)
@@ -131,6 +131,7 @@ npm run dev                     # http://localhost:3000
    - `NEXT_PUBLIC_SITE_URL` (커스텀 도메인일 때만)
    - `CRON_SECRET` (Sensitive, `openssl rand -hex 32`) — Vercel Cron 이 `Authorization: Bearer` 로 전달
    - `GITHUB_TOKEN` (선택)
+   - `OPENAI_API_KEY` (Sensitive). 운영에서는 키가 없으면 AI 기능이 비활성화되고 모의 AI 는 사용할 수 없습니다.
 6. `vercel.json` 의 Cron(`0 21 * * *` = 06:00 KST)은 배포 시 자동 등록됩니다.
 
 ## 7. 보안 적용 현황
@@ -148,10 +149,12 @@ npm run dev                     # http://localhost:3000
 | 데이터 삭제 | 콘텐츠 일괄 삭제, 계정 삭제(FK cascade) |
 | 수집 요청 안전 | 타임아웃 10초, 응답 2MB 제한, 식별 User-Agent, 사용자 RSS는 https만 + 내부 IP 차단(SSRF) + 리다이렉트 재검사, XML 엔티티 선언 거부 |
 | 수집 권한 | 수집 콘텐츠는 service role 로만 저장, 사용자 소스 권한 값은 DB 트리거가 강제, 수동 수집 10분 제한 |
-| 남은 항목 | 앱 레벨 Rate Limiting(일반 API), 토큰 암호화(OAuth 도입 시), CSP, DNS rebinding 완전 차단 → Phase 3~4 |
+| AI 처리 | AI 허용 콘텐츠만 서버에서 처리, LinkedIn API 데이터 항상 차단, 최소 필드만 전송, `store:false`, 프롬프트 인젝션 완화, 출력 스키마 재검증, 사용자별 일일 50회 |
+| 비밀값 | GitHub Secret Scanning·푸시 보호, verify/CI 비밀값 검사 |
+| 남은 항목 | 앱 레벨 Rate Limiting(일반 API), 토큰 암호화(OAuth 도입 시), CSP, DNS rebinding 완전 차단 → Phase 4 |
 
 ## 8. 로드맵
 
+- Phase 3 (완료): AI 처리 권한 게이트, 직접 등록 콘텐츠 AI 동의·철회, AI Summary/Insight, Topic Intelligence, Daily Briefing(07:00 KST, 재시도 3회), 비밀값 검사
 - Phase 2 (완료): RSS·HN·GitHub·arXiv·HF 수집기, Vercel Cron, collection_logs, 키워드 기반 주제 분류, 사용자 RSS
-- Phase 3: AIProvider(OpenAI), AI Summary/Insight, Topic Intelligence, Daily Briefing(07:00 KST, 재시도)
 - Phase 4: 랭킹 고도화, RAG 검색(pgvector), 알림, 주간·월간 리포트, Reddit/X 커넥터(승인 시)

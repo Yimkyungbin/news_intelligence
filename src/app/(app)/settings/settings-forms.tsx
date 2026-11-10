@@ -16,7 +16,7 @@ type Profile = {
   notify_email: boolean;
 };
 
-export function ProfileForm({ profile, models }: { profile: Profile; models: readonly string[] }) {
+export function ProfileForm({ profile, models }: { profile: Profile; models: { value: string; label: string }[] }) {
   const [state, action] = useActionState(updateProfile, null);
   useActionToast(state);
   return (
@@ -42,14 +42,14 @@ export function ProfileForm({ profile, models }: { profile: Profile; models: rea
           ))}
         </Select>
       </Field>
-      <Field label="Daily Briefing 시간" htmlFor="s-bt" hint="Phase 3 스케줄러에서 사용 (기본 07:00 KST)">
+      <Field label="Daily Briefing 시간" htmlFor="s-bt" hint="현재 자동 생성은 모든 사용자 07:00 KST 고정 (사용자별 시간은 시간 단위 Cron 지원 후 적용)">
         <Input id="s-bt" name="briefing_time" type="time" required defaultValue={profile.briefing_time.slice(0, 5)} />
       </Field>
-      <Field label="AI 모델" htmlFor="s-model" hint="Provider 교체 가능 구조 (Phase 3)">
+      <Field label="AI 모델" htmlFor="s-model" hint="AI 요약·주제 인사이트·브리핑에 사용 (OpenAI 키가 없으면 로컬은 DEMO 모의 AI)">
         <Select id="s-model" name="ai_model" defaultValue={profile.ai_model}>
           {models.map((m) => (
-            <option key={m} value={m}>
-              {m}
+            <option key={m.value} value={m.value}>
+              {m.label}
             </option>
           ))}
         </Select>

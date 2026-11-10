@@ -9,7 +9,8 @@
     "lint": "eslint src",
     "typecheck": "next typegen && tsc --noEmit",
     "test:unit": "node --experimental-strip-types --no-warnings --test \"tests/unit/**/*.test.ts\"",
-    "verify": "npm run typecheck && npm run lint && npm run test:unit && npm run build",
+    "check:secrets": "bash scripts/check-secrets.sh",
+    "verify": "npm run check:secrets && npm run typecheck && npm run lint && npm run test:unit && npm run build",
     "test:db": "docker exec -i supabase_db_linkedin_intelligence psql -U postgres -q -v ON_ERROR_STOP=1 < supabase/tests/rls_test.sql",
     "test:e2e": "uv run --quiet --with playwright==1.55.0 python scripts/e2e_smoke.py",
     "verify:full": "bash scripts/verify-full.sh"

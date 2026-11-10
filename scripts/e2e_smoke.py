@@ -332,6 +332,101 @@ def run():
 
         check("직접 등록 콘텐츠 언어 판별 → Trending 언어 필터", language_detection)
 
+        def phase3_ai():
+            # Phase 3: AI 처리 동의 → 요약(모의 AI) → 주제 인사이트 → Daily Briefing → 철회. 외부 AI 미사용(AI_PROVIDER=mock)
+            title = "RAG 에이전트 평가 실무 가이드"
+            url = "https://example.com/ai-consent-guide"
+
+            def content_id() -> str:
+                return sql(
+                    "select c.id from public.content_items c join public.profiles p on p.id = c.user_id "
+                    f"where p.email = '{EMAIL}' and c.original_url = '{url}'"
+                )
+
+            page.goto(f"{BASE}/saved")
+            page.get_by_role("button", name="URL 직접 등록").click()
+            page.fill("#m-url", url)
+            page.fill("#m-title", title)
+            page.fill("#m-summary", "RAG 파이프라인과 에이전트 평가 방법을 정리한 글입니다.")
+            page.get_by_role("button", name="등록 및 저장").click()
+            expect(page.get_by_role("button", name=title)).to_be_visible()
+            cid = content_id()
+            assert cid, "등록 콘텐츠 없음"
+            # 직접 등록 콘텐츠가 관심 주제(RAG)에 자동 연결됨
+            assert sql(f"select count(*) from public.content_topics where content_id = '{cid}'") != "0", "주제 자동 연결 안 됨"
+
+            # 1) 기본 차단 → 동의해야만 허용
+            page.get_by_role("button", name=title).click()
+            dialog = page.get_by_role("dialog", name=title)
+            expect(dialog.get_by_text("권리를 확인한 경우에만")).to_be_visible()
+            allow = dialog.get_by_role("button", name="AI 처리 허용", exact=True)
+            expect(allow).to_be_disabled()
+            dialog.get_by_label(re.compile("외부 AI\\(OpenAI\\)로 보내 요약할 권리")).check()
+            allow.click()
+            expect(page.get_by_text("AI 처리를 허용했습니다.")).to_be_visible()
+            assert sql(f"select ai_processing_allowed::text || ai_processing_status from public.content_items where id = '{cid}'") == "truepending"
+
+            # 2) AI 요약 생성 (모의 AI → DEMO 표시)
+            dialog.get_by_role("button", name="AI 요약 생성").click()
+            expect(page.get_by_text("DEMO 모의 AI 요약을 생성했습니다.")).to_be_visible(timeout=30000)
+            expect(dialog.get_by_text(re.compile(r"^\[DEMO 요약\]"))).to_be_visible()
+            expect(dialog.get_by_text("DEMO 모의 AI")).to_be_visible()
+            expect(dialog.get_by_text("산업·비즈니스 영향", exact=True)).to_be_visible()
+            assert sql(f"select provider || ':' || is_demo::text from public.ai_insights where content_id = '{cid}'") == "mock:true"
+            page.keyboard.press("Escape")
+
+            # 3) 권한 없는 콘텐츠(DEMO)는 동의 옵션 없이 차단 안내만
+            page.goto(f"{BASE}/trending?period=monthly&limit=50")
+            page.get_by_role("button", name="[DEMO] 엔터프라이즈 Agentic AI 도입 체크리스트").first.click()
+            demo_dialog = page.get_by_role("dialog", name="[DEMO] 엔터프라이즈 Agentic AI 도입 체크리스트")
+            expect(demo_dialog.get_by_text("출처의 AI 처리 권한이 확인되지 않아")).to_be_visible()
+            expect(demo_dialog.get_by_role("button", name="AI 처리 허용", exact=True)).to_have_count(0)
+            expect(demo_dialog.get_by_role("button", name="AI 요약 생성")).to_have_count(0)
+            page.keyboard.press("Escape")
+
+            # 4) Topic Intelligence: 허용 콘텐츠만 분석, 미허용은 제외 표시
+            page.goto(f"{BASE}/topics")
+            page.get_by_role("link", name="RAG / Knowledge Management", exact=True).click()
+            page.get_by_role("button", name="AI 인사이트 생성").click()
+            expect(page.get_by_text(re.compile(r"주제 인사이트를 생성했습니다 \(콘텐츠 1건 분석\)"))).to_be_visible(timeout=30000)
+            expect(page.get_by_text(re.compile(r"^\[DEMO\] 'RAG / Knowledge Management' 주제"))).to_be_visible()
+            expect(page.get_by_text(re.compile(r"AI 미허용 \d+건 제외"))).to_be_visible()
+
+            # 5) Daily Briefing: 대시보드에서 생성 → 6개 섹션, AI 섹션은 허용 콘텐츠로 생성
+            page.goto(f"{BASE}/")
+            page.get_by_role("button", name="지금 생성").click()
+            expect(page.get_by_text("브리핑을 생성했습니다.")).to_be_visible(timeout=60000)
+            expect(page.get_by_text("트렌드 TOP 5")).to_be_visible()
+            expect(page.get_by_text(re.compile(r"\[DEMO\] AI 처리 허용 콘텐츠 1건 기반"))).to_be_visible()
+            page.goto(f"{BASE}/briefing")
+            for section in ["오늘의 주요 기술 트렌드 TOP 5", "주요 신규 콘텐츠 TOP 10", "관심 주제별 업데이트", "주요 인플루언서 콘텐츠", "AI가 선정한 핵심 인사이트", "전일 대비 주요 변화"]:
+                expect(page.get_by_role("region", name=section)).to_be_visible()
+            expect(page.get_by_role("list", name="브리핑 실행 이력").get_by_text("성공").first).to_be_visible()
+            page.get_by_role("region", name="AI가 선정한 핵심 인사이트").get_by_role("button", name="근거 1").first.click()
+            expect(page.get_by_role("dialog", name=title)).to_be_visible()
+            page.keyboard.press("Escape")
+            page.screenshot(path=f"{SHOTS}/briefing.png", full_page=True)
+            # 수동 생성 10분 제한
+            page.get_by_role("button", name="지금 생성").click()
+            expect(page.get_by_text(re.compile("10분에 한 번 생성"))).to_be_visible()
+
+            # 6) 철회 → AI 결과 삭제, 차단 상태로 복귀
+            page.goto(f"{BASE}/saved")
+            page.get_by_role("button", name=title).click()
+            dialog = page.get_by_role("dialog", name=title)
+            dialog.get_by_role("button", name="AI 처리 허용 철회").click()
+            expect(page.get_by_text("AI 처리 허용을 철회하고 AI 결과를 삭제했습니다.")).to_be_visible()
+            expect(dialog.get_by_text("권리를 확인한 경우에만")).to_be_visible()
+            assert sql(f"select count(*) from public.ai_insights where content_id = '{cid}'") == "0"
+            assert sql(f"select ai_processing_allowed::text || ai_processing_status from public.content_items where id = '{cid}'") == "falseblocked"
+            page.keyboard.press("Escape")
+
+            # 7) Cron 엔드포인트는 인증 없이 호출 불가
+            # (CRON_SECRET 설정 시 401, 미설정 환경(CI)에서는 503 — 둘 다 실행 거부)
+            assert page.request.get(f"{BASE}/api/cron/briefing").status in (401, 503)
+
+        check("Phase 3 AI: 동의·요약·주제 인사이트·브리핑·철회 (모의 AI)", phase3_ai)
+
         def global_search():
             page.goto(f"{BASE}/")
             page.get_by_label("전역 검색").fill("Jane")

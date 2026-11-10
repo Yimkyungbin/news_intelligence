@@ -17,7 +17,9 @@ inclusion: always
 | 전체 | `npm run verify:full` | 로컬 Supabase 실행 | 커밋·배포 전 필수 |
 
 - `npm run verify` = `typecheck` → `lint` → `test:unit` → `build`
-- 단위 테스트는 Node 내장 테스트 러너(`node --test`)를 사용한다. 테스트 대상 순수 모듈은 `@/` 별칭 대신 상대 경로와 `.ts` 확장자로 import 한다 (`src/lib/collectors/*`, `src/lib/language.ts`).
+- `verify` 첫 단계는 `check:secrets`(비밀값 검사)이다. 키는 `.env.local`·Vercel 환경변수에만 넣고 `.env.example` 은 빈 값으로 둔다.
+- 단위 테스트는 Node 내장 테스트 러너(`node --test`)를 사용한다. 테스트 대상 순수 모듈은 `@/` 별칭 대신 상대 경로와 `.ts` 확장자로 import 한다 (`src/lib/collectors/*`, `src/lib/ai/{gate,prompts,openai,schemas,mock}.ts`, `src/lib/briefing/compose.ts`, `src/lib/language.ts`). 이 모듈에서는 strip-types 가 지원하지 않는 문법(생성자 매개변수 속성 `constructor(readonly x)`, `enum`, `namespace`)을 쓰지 않는다.
+- E2E 는 `verify:full` 이 `AI_PROVIDER=mock` 서버를 직접 띄워 실행한다. 포트 3000 에 앱이 떠 있으면 실패하므로 `npm run dev` 를 먼저 종료한다 (실제 OpenAI 키 호출 방지). 실제 키 확인은 검증 통과 후 최소 건수만 수동으로 한다.
 - 순수 로직 변경(파서, 분류, 검증): `tests/unit/*.test.ts` 에 테스트 추가
 - `npm run verify:full` = `verify` → `test:db` → (앱 미실행 시 `next start` 자동 기동) → `test:e2e`
 - Python 실행 환경은 `uv`를 사용한다 (E2E는 `uv run --with playwright==...`).
