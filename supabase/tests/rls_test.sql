@@ -14,12 +14,12 @@ declare n int;
 begin
   select count(*) into n from public.topics where user_id = '00000000-0000-0000-0000-00000000000a';
   assert n = 10, format('seed topics expected 10, got %s', n);
-  select count(*) into n from public.content_items where user_id = '00000000-0000-0000-0000-00000000000a' and provenance = 'demo';
-  assert n = 5, format('seed demo content expected 5, got %s', n);
-  select count(*) into n from public.content_topics ct join public.content_items c on c.id = ct.content_id
-    where c.user_id = '00000000-0000-0000-0000-00000000000a';
-  assert n > 0, 'demo content should be linked to topics';
-  raise notice 'PASS seed: 10 topics, 5 demo items, topic links %', n;
+  -- 예시(DEMO) 콘텐츠는 더 이상 생성하지 않음
+  select count(*) into n from public.content_items where user_id = '00000000-0000-0000-0000-00000000000a';
+  assert n = 0, format('signup must not create example content, got %s', n);
+  select count(*) into n from public.data_sources where slug = 'demo';
+  assert n = 0, 'demo source must not exist';
+  raise notice 'PASS seed: 10 topics, no example content';
 end $$;
 
 -- ===== 사용자 A로 전환 =====
@@ -40,8 +40,8 @@ begin
 
   -- 2) 시스템 소스 카탈로그는 읽기 가능, 수정 불가
   select count(*) into n from public.data_sources where user_id is null;
-  -- 소스가 추가될 수 있으므로 최소 개수로 확인 (Phase 1: 17 + 확대: 22 = 39)
-  assert n >= 39, format('system sources expected >= 39, got %s', n);
+  -- 소스가 추가될 수 있으므로 최소 개수로 확인 (Phase 1: 17 + 확대: 22 - DEMO 1 = 38)
+  assert n >= 38, format('system sources expected >= 38, got %s', n);
   update public.data_sources set ai_processing_allowed = true where slug = 'linkedin-api';
   get diagnostics n = row_count;
   assert n = 0, 'A must not update system source';
@@ -139,6 +139,15 @@ begin
     assert sqlerrm <> 'SHOULD_NOT_REACH', 'client must not call purge_expired_content';
   end;
   raise notice 'PASS purge function: not callable by clients';
+
+  -- 11-1) 출처 AI 허용 일괄 변경 함수(security definer)는 클라이언트가 호출할 수 없음
+  begin
+    perform public.set_sources_ai_permission(array(select id from public.data_sources where user_id is null), true);
+    raise exception 'SHOULD_NOT_REACH';
+  exception when others then
+    assert sqlerrm <> 'SHOULD_NOT_REACH', 'client must not call set_sources_ai_permission';
+  end;
+  raise notice 'PASS bulk AI permission function: not callable by clients';
 
   -- ===== Phase 3 =====
   -- 13) 클라이언트는 AI 결과(주제 인사이트)·브리핑을 직접 만들 수 없음

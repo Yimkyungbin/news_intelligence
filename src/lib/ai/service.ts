@@ -13,7 +13,7 @@ import { disabledSourceIdsFor } from "@/lib/source-settings";
  * - 작업 이력: collection_logs(job_type=ai/topic_ai), 비밀값·원문 미기록
  */
 
-export const DAILY_AI_LIMIT = 50;
+export const DAILY_AI_LIMIT = 200;
 const TOPIC_WINDOW_DAYS = 14;
 
 type Admin = NonNullable<ReturnType<typeof createAdminClient>>;

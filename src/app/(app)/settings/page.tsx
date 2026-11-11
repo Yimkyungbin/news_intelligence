@@ -3,6 +3,7 @@ import { ActionButton, ConfirmButton } from "@/components/confirm-button";
 import { AddFeedForm, CollectNowButton } from "./collect-forms";
 import { deleteUserFeed, setUserFeedActive } from "./collect-actions";
 import { SourceToggle } from "./source-toggle";
+import { BulkToggle } from "./bulk-toggle";
 import { getDisabledSourceIds } from "@/lib/source-settings";
 import { isAdminEmail } from "@/lib/admin";
 import { requireUser } from "@/lib/auth";
@@ -65,12 +66,17 @@ export default async function SettingsPage() {
   ]);
   const disabled = new Set(await getDisabledSourceIds(user.id));
   const admin = isAdminEmail(user.email);
+  const aiEligible = ((allSources ?? []) as DataSource[]).filter((s) => s.user_id === null && !["linkedin_api", "user_provided", "demo"].includes(s.source_type));
   // 정렬: 수집 소스(유형별) → 직접 입력·DEMO → LinkedIn
   const TYPE_ORDER = ["news", "official_blog", "rss", "public_api", "social_api", "demo", "user_provided", "linkedin_api"];
   const sources = ((allSources ?? []) as DataSource[])
     .filter((s) => s.user_id === null)
     .sort((a, b) => TYPE_ORDER.indexOf(a.source_type) - TYPE_ORDER.indexOf(b.source_type) || a.name.localeCompare(b.name, "ko"));
   const myFeeds = ((allSources ?? []) as DataSource[]).filter((s) => s.user_id === user.id);
+  // 열 헤더 전체 on/off 집계
+  const toggleable = sources.filter((s) => s.source_type !== "user_provided" && s.source_type !== "linkedin_api");
+  const enabledCount = toggleable.filter((s) => !disabled.has(s.id)).length;
+  const aiAllowedCount = aiEligible.filter((s) => s.ai_processing_allowed).length;
   type LogRow = {
     id: string;
     started_at: string;
@@ -104,17 +110,27 @@ export default async function SettingsPage() {
               수집처별 사용 여부(내 계정 기준)·로고·권한 상태·허용 처리 범위. 끈 소스는 수집하지 않고 피드에서 숨깁니다(저장한 글은 유지). 상태 기준은 docs/api-feasibility-matrix.md (AVAILABLE / CONDITIONAL / UNAVAILABLE / NOT_VERIFIED)
             </CardDescription>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
+          <CardContent className="flex flex-col gap-3 overflow-x-auto">
             <table className="w-full min-w-[820px] text-left text-xs" aria-label="데이터 소스 목록">
               <thead className="text-muted-foreground">
                 <tr className="border-b">
-                  <th className="py-2 pr-2 font-medium">사용</th>
+                  <th className="py-2 pr-2 font-medium">
+                    <span className="flex flex-col gap-1">
+                      사용
+                      <BulkToggle kind="use" onCount={enabledCount} total={toggleable.length} />
+                    </span>
+                  </th>
                   <th className="py-2 pr-2 font-medium">소스</th>
                   <th className="py-2 pr-2 font-medium">권한 상태</th>
                   <th className="py-2 pr-2 font-medium">연결</th>
                   <th className="py-2 pr-2 text-center font-medium">저장</th>
                   <th className="py-2 pr-2 text-center font-medium">표시</th>
-                  <th className="py-2 pr-2 text-center font-medium">AI 번역·요약{admin ? " (운영자)" : ""}</th>
+                  <th className="py-2 pr-2 text-center font-medium">
+                    <span className="flex flex-col items-center gap-1">
+                      AI 번역·요약{admin ? " (운영자)" : ""}
+                      {admin ? <BulkToggle kind="ai" onCount={aiAllowedCount} total={aiEligible.length} /> : null}
+                    </span>
+                  </th>
                   <th className="py-2 pr-2 text-center font-medium">외부 LLM</th>
                   <th className="py-2 pr-2 font-medium">보관</th>
                   <th className="py-2 font-medium">비고</th>
