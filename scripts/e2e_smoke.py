@@ -475,6 +475,27 @@ def run():
             page.goto(f"{BASE}/trending?period=monthly&limit=50")
             expect(page.get_by_role("button", name=demo_title).first).to_be_visible()
 
+            # 1-1) 사용 열 전체 끄기 → 피드 숨김 / 전체 켜기 → 복원 (내 계정 기준, 한 번의 요청)
+            page.goto(f"{BASE}/settings")
+            page.get_by_role("switch", name=re.compile(r"^사용 전체 끄기")).click()
+            expect(page.get_by_text(re.compile(r"소스 \d+개를 모두 껐습니다"))).to_be_visible(timeout=60000)
+            off_count = sql(
+                "select count(*) from public.user_source_settings s join public.profiles p on p.id = s.user_id "
+                f"where p.email = '{EMAIL}' and not s.enabled"
+            )
+            assert int(off_count) > 1, f"전체 끄기 미반영: {off_count}"
+            page.reload()
+            expect(page.get_by_role("switch", name="Hacker News 켜기")).to_be_visible()
+            page.goto(f"{BASE}/trending?period=monthly&limit=50")
+            expect(page.get_by_role("button", name=demo_title)).to_have_count(0)
+            page.goto(f"{BASE}/settings")
+            page.get_by_role("switch", name=re.compile(r"^사용 전체 켜기")).click()
+            expect(page.get_by_text(re.compile(r"소스 \d+개를 모두 켰습니다"))).to_be_visible(timeout=60000)
+            page.reload()
+            expect(page.get_by_role("switch", name=re.compile(r"^사용 전체 끄기"))).to_be_visible()
+            page.goto(f"{BASE}/trending?period=monthly&limit=50")
+            expect(page.get_by_role("button", name=demo_title).first).to_be_visible()
+
             # 2) Statistics: 메뉴 → 통계 갱신 → 차트·출처·키워드 → 날짜 상세
             page.goto(f"{BASE}/statistics")
             page.get_by_role("button", name="통계 갱신").click()
@@ -520,7 +541,14 @@ def run():
                 page.goto(f"{BASE}/settings")
                 page.get_by_role("switch", name="E2E AI Source AI 번역·요약 허용").click()
                 expect(page.get_by_text(re.compile("'E2E AI Source'의 AI 번역·요약을 허용했습니다"))).to_be_visible(timeout=60000)
-                assert sql(f"select provider || ':' || is_demo::text from public.content_ai_cache where original_url = '{url}'") == "mock:true"
+                # 번역·시사점은 응답 후 백그라운드(after)에서 생성 → 최대 30초 대기
+                cached = ""
+                for _ in range(60):
+                    cached = sql(f"select provider || ':' || is_demo::text from public.content_ai_cache where original_url = '{url}'")
+                    if cached:
+                        break
+                    time.sleep(0.5)
+                assert cached == "mock:true", f"백그라운드 번역 미생성: {cached!r}"
 
                 page.goto(f"{BASE}/trending?period=weekly&limit=50")
                 card = page.locator("article", has=page.get_by_text(f"원문: {title}"))

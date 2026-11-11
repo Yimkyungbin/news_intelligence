@@ -140,6 +140,15 @@ begin
   end;
   raise notice 'PASS purge function: not callable by clients';
 
+  -- 11-1) 출처 AI 허용 일괄 변경 함수(security definer)는 클라이언트가 호출할 수 없음
+  begin
+    perform public.set_sources_ai_permission(array(select id from public.data_sources where user_id is null), true);
+    raise exception 'SHOULD_NOT_REACH';
+  exception when others then
+    assert sqlerrm <> 'SHOULD_NOT_REACH', 'client must not call set_sources_ai_permission';
+  end;
+  raise notice 'PASS bulk AI permission function: not callable by clients';
+
   -- ===== Phase 3 =====
   -- 13) 클라이언트는 AI 결과(주제 인사이트)·브리핑을 직접 만들 수 없음
   begin
