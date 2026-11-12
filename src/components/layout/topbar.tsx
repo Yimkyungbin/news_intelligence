@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Form from "next/form";
 import { useTheme } from "next-themes";
 import Link from "next/link";
@@ -28,8 +28,13 @@ function useClickOutside(onClose: () => void) {
   return ref;
 }
 
+const noopSubscribe = () => () => {};
+
 function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
+  const { theme: storedTheme, setTheme } = useTheme();
+  // 서버 렌더링 시점에는 저장된 테마를 알 수 없음 → 마운트 전에는 "system" 으로 그려 hydration 불일치를 막음
+  const mounted = useSyncExternalStore(noopSubscribe, () => true, () => false);
+  const theme = mounted ? storedTheme : "system";
   const order = ["light", "dark", "system"] as const;
   const next = order[(order.indexOf((theme as (typeof order)[number]) ?? "system") + 1) % order.length];
   const label = { light: "라이트", dark: "다크", system: "시스템" };
