@@ -254,7 +254,6 @@ def run():
                 ("/trending", "Trending Posts"),
                 ("/papers", "Papers"),
                 ("/influencers", "Influencers"),
-                ("/following", "My Following"),
                 ("/topics", "My Topics"),
                 ("/knowledge", "Knowledge Base"),
                 ("/saved", "Saved Posts"),
@@ -319,8 +318,11 @@ def run():
         check("한국어 입력 NFC 정규화 저장", korean_nfc)
 
         def following_crud():
+            # 기존 /following 은 Influencers '팔로우 중' 탭으로 이동
             page.goto(f"{BASE}/following")
-            page.get_by_role("button", name="인물 추가").click()
+            expect(page).to_have_url(re.compile(r"/influencers\?tab=following"))
+            expect(page.get_by_role("tab", name=re.compile(r"^팔로우 중"))).to_have_attribute("aria-selected", "true")
+            page.get_by_role("button", name="팔로우할 인물 추가").click()
             page.fill("#pname-new", "Jane Doe")
             page.fill("#ptitle-new", "Chief AI Officer")
             page.fill("#pcompany-new", "Example Corp")
@@ -349,14 +351,23 @@ def run():
             expect(page.get_by_text("비활성", exact=True)).to_be_visible()
             page.get_by_role("button", name="활성화", exact=True).first.click()
             expect(page.get_by_text("비활성", exact=True)).to_have_count(0)
+            # 팔로우 해제 → '팔로우 후보' 탭으로 이동, 다시 팔로우 → '팔로우 중' 탭
+            page.get_by_role("button", name="팔로우 해제").first.click()
+            expect(page.get_by_role("heading", name="Jane Doe")).to_have_count(0)
+            page.get_by_role("tab", name=re.compile(r"^팔로우 후보")).click()
+            expect(page.get_by_role("heading", name="Jane Doe")).to_be_visible()
+            page.get_by_role("button", name="팔로우", exact=True).first.click()
+            expect(page.get_by_role("heading", name="Jane Doe")).to_have_count(0)
+            page.get_by_role("tab", name=re.compile(r"^전체")).click()
+            expect(page.get_by_role("heading", name="Jane Doe")).to_be_visible()
 
-        check("My Following 추가/URL 검증/링크·로고/활성 토글", following_crud)
+        check("Influencers 통합: 팔로우 중 탭 추가/URL 검증/링크·로고/활성·팔로우 토글/탭 이동", following_crud)
 
         def dashboard_following():
             page.goto(f"{BASE}/")
             expect(page.get_by_role("link", name="LinkedIn 게시글")).to_be_visible()
 
-        check("대시보드 My Following Update 반영", dashboard_following)
+        check("대시보드 Following Update 반영", dashboard_following)
 
         def saved_flow():
             page.goto(f"{BASE}/trending?period=monthly&limit=20")

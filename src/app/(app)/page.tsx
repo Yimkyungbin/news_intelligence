@@ -46,8 +46,10 @@ const HELP = {
     "Hugging Face 추천 수, OpenAlex 인용 수를 출처 안의 순위로 비교하고, 지표가 없는 arXiv 논문은 최신순으로 뒤에 붙습니다.",
   ],
   topicUpdate: ["활성 관심 주제별로 최근 7일 연결된 콘텐츠 수입니다.", "행을 누르면 최신 콘텐츠 5건이 펼쳐지고, 제목을 누르면 상세 내용을 볼 수 있습니다."],
-  followingUpdate: ["My Following에서 직접 등록한 인물의 게시글·블로그 링크입니다.", "제목을 누르면 원문이 새 탭에서 열립니다."],
-  recommended: ["Influencers 메뉴에 등록했지만 아직 팔로우하지 않은 인물입니다.", "팔로워 수·영향력 같은 검증 가능한 데이터가 없어 자동 추천은 하지 않습니다."],
+  followingUpdate: [
+    "Influencers에서 팔로우한 인물의 게시글·블로그 링크입니다 (직접 등록).",
+    "제목을 누르면 원문이 새 탭에서 열립니다. 아래 '팔로우 후보'는 등록했지만 아직 팔로우하지 않은 인물입니다.",
+  ],
 } as const;
 
 function Help({ label, lines, align }: { label: string; lines: readonly string[]; align?: "left" | "right" }) {
@@ -104,13 +106,13 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
     supabase.from("daily_briefings").select("briefing_date,content,generated_at,is_demo").eq("user_id", user.id).order("briefing_date", { ascending: false }).limit(1).maybeSingle(),
     getDisabledSourceIds(user.id),
   ]);
-  const influencersRes = await supabase
+  // 팔로우 후보(등록했지만 팔로우하지 않은 활성 인물) 수: Following Update 카드에서 Influencers 로 연결
+  const { count: candidateCount = 0 } = await supabase
     .from("influencers")
-    .select("id,name,company,job_title,category")
+    .select("id", { count: "exact", head: true })
     .eq("user_id", user.id)
     .eq("is_active", true)
-    .eq("is_following", false)
-    .limit(4);
+    .eq("is_following", false);
   const disabledSources = new Set(disabledIds);
 
   // 주제별 최근 7일 업데이트 (펼치기용 최신 5건 포함)
@@ -302,7 +304,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader className="flex-row items-start justify-between">
             <div>
@@ -322,15 +324,15 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
           <CardHeader className="flex-row items-start justify-between">
             <div>
               <CardTitle className="flex items-center gap-1.5">
-                My Following Update <Help label="My Following Update" lines={HELP.followingUpdate} />
+                Following Update <Help label="Following Update" lines={HELP.followingUpdate} align="right" />
               </CardTitle>
-              <CardDescription>직접 등록한 인물의 최신 콘텐츠 링크</CardDescription>
+              <CardDescription>팔로우한 인물의 최신 콘텐츠 링크</CardDescription>
             </div>
-            <SectionLink href="/following" />
+            <SectionLink href="/influencers?tab=following" />
           </CardHeader>
           <CardContent>
             {following.length === 0 ? (
-              <EmptyState title="등록된 콘텐츠 링크가 없습니다" description="My Following에서 인물과 게시글 링크를 추가하세요." />
+              <EmptyState title="등록된 콘텐츠 링크가 없습니다" description="Influencers에서 인물을 팔로우하고 게시글 링크를 추가하세요." />
             ) : (
               <ul className="flex flex-col divide-y">
                 {following.map((f) => (
@@ -347,34 +349,11 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
                 ))}
               </ul>
             )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex-row items-start justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-1.5">
-                Recommended Influencers <Help label="Recommended Influencers" lines={HELP.recommended} align="right" />
-              </CardTitle>
-              <CardDescription>등록했지만 아직 팔로우하지 않은 인물</CardDescription>
-            </div>
-            <SectionLink href="/influencers" />
-          </CardHeader>
-          <CardContent>
-            {(influencersRes.data ?? []).length === 0 ? (
-              <EmptyState title="추천할 인물이 없습니다" description="검증 가능한 데이터가 없어 자동 추천은 제공하지 않습니다. Influencers 메뉴에서 인물을 등록하세요." />
-            ) : (
-              <ul className="flex flex-col divide-y">
-                {(influencersRes.data ?? []).map((p) => (
-                  <li key={p.id} className="py-2">
-                    <Link href={`/influencers?q=${encodeURIComponent(p.name)}`} className="text-sm font-medium hover:text-primary">
-                      {p.name}
-                    </Link>
-                    <p className="text-[11px] text-muted-foreground">{[p.job_title, p.company].filter(Boolean).join(" · ")}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
+            {candidateCount ? (
+              <Link href="/influencers?tab=candidates" className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary">
+                팔로우 후보 {candidateCount}명 보기 <ArrowRight className="h-3 w-3" aria-hidden="true" />
+              </Link>
+            ) : null}
           </CardContent>
         </Card>
       </div>

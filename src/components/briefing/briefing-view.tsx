@@ -191,7 +191,7 @@ export function BriefingFull({ b }: { b: BriefingContent }) {
       <section aria-label="주요 인플루언서 콘텐츠">
         <H n={4}>주요 인플루언서 콘텐츠</H>
         {b.influencer_content.length === 0 ? (
-          <p className="text-xs text-muted-foreground">최근 24시간 My Following에 등록된 콘텐츠 링크가 없습니다.</p>
+          <p className="text-xs text-muted-foreground">최근 24시간 팔로우한 인물(Influencers)에 등록된 콘텐츠 링크가 없습니다.</p>
         ) : (
           <ul className="flex flex-col gap-1 text-sm">
             {b.influencer_content.map((l) => (

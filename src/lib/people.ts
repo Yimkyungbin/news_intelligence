@@ -2,7 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { LOGO_REGISTRY, resolveSourceLogo } from "@/lib/sources/registry";
 import type { Influencer, InfluencerLink } from "@/lib/types";
-import type { LinkWithLogo } from "@/app/(app)/following/person-card";
+import type { LinkWithLogo } from "@/app/(app)/influencers/person-card";
 
 const PERSON_SELECT = "id,name,company,job_title,linkedin_url,category,notes,is_following,is_active,created_at";
 

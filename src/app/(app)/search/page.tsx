@@ -69,7 +69,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
               <ul className="flex flex-col gap-1 text-sm">
                 {(people.data ?? []).map((p) => (
                   <li key={p.id} className="flex items-center gap-2">
-                    <Link href={p.is_following ? "/following" : `/influencers?q=${encodeURIComponent(p.name)}`} className="hover:text-primary">
+                    <Link href={`/influencers?${p.is_following ? "tab=following&" : ""}q=${encodeURIComponent(p.name)}`} className="hover:text-primary">
                       {p.name}
                     </Link>
                     {p.company ? <span className="text-xs text-muted-foreground">{p.company}</span> : null}

@@ -27,3 +27,7 @@
   - [x] 9.1 `npm run verify:full` 통과 (secrets, unit 108, DB 21, E2E 25/25)
   - [ ] 9.2 PR → CI `verify-full` 통과 → 병합
 - [ ] 10. Google(OIDC) 로그인 — 운영자 Gmail, OAuth 클라이언트 정보 대기
+- [x] 11. My Following · Influencers 통합
+  - 같은 테이블·카드·Server Action 을 쓰고 `is_following` 필터만 달라 Influencers 메뉴 하나로 통합 (탭: 전체 / 팔로우 중 / 팔로우 후보)
+  - `/following` 은 `/influencers?tab=following` 으로 이동, 대시보드 Recommended Influencers 카드는 Following Update 의 '팔로우 후보 N명' 링크로 대체
+  - [x] 11.1 E2E: /following 이동, 팔로우 중 탭 추가, 팔로우 해제·재팔로우 시 탭 이동
