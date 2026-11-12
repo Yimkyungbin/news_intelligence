@@ -74,3 +74,58 @@ export function toIsoDate(v: unknown): string | null {
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
+
+const TITLE_MAX = 120;
+
+/**
+ * SNS 게시글 제목 정리 (Mastodon·Bluesky 등 본문 첫 문장을 제목으로 쓰는 경우)
+ * - URL, @멘션(@user@host 포함), 앞쪽 "RE:"/"RT" 제거
+ * - 해시태그는 '#' 만 제거하고 단어는 유지 ("# HumanEmacs" → "HumanEmacs")
+ * - 정리 후 너무 짧으면(8자 미만) 본문에서 같은 방식으로 정리한 첫 문장을 사용
+ */
+export function cleanPostText(s: string): string {
+  return (
+    s
+      .normalize("NFC")
+      // HTML 제거 과정에서 "https:// host/path 123456" 처럼 공백이 끼어 깨진 URL도 제거
+      .replace(/https?:\/\/\s*[^\s]+(?:\s+\d{4,}\b)*/gi, " ")
+      .replace(/(^|\s)(?:www\.)\S+/gi, " ")
+      // @user, @user@host, "@ user" (공백이 낀 멘션)
+      .replace(/(^|[\s(])@\s?[\w.-]+(?:@[\w.-]+)?/g, "$1")
+      .replace(/#\s*(?=[\p{L}\p{N}_])/gu, "")
+      .replace(/^\s*(?:re|rt|fw|fwd)\s*:\s*/i, "")
+      .replace(/\s+([,.!?:;])/g, "$1")
+      .replace(/\s+/g, " ")
+      .replace(/^[\s:;,.\-–—|/]+/, "")
+      .trim()
+  );
+}
+
+export function cleanPostTitle(title: string, body?: string | null): string {
+  const firstSentence = (s: string) => s.split(/(?<=[.!?。])\s/)[0] ?? s;
+  let t = cleanPostText(title);
+  if (Array.from(t).length < 8 && body) t = cleanPostText(firstSentence(cleanPostText(body)));
+  if (!t) t = title.trim();
+  return truncate(t, TITLE_MAX);
+}
+
+/** SNS 게시글 요약: 정리 후 제목과 같은 앞부분은 빼서 중복 표시를 막음. 남는 내용이 없으면 null */
+export function cleanPostSummary(summary: string | null | undefined, title: string): string | null {
+  if (!summary) return null;
+  let s = cleanPostText(summary);
+  const truncated = title.endsWith("…");
+  const head = title.replace(/…$/, "");
+  if (head && s.startsWith(head)) {
+    s = s.slice(head.length);
+    // 제목이 단어 중간에서 잘렸으면 남은 단어 조각도 제거
+    if (truncated) s = s.replace(/^[^\s]*/, "");
+    s = s.replace(/^[\s.!?:;,…-]+/, "");
+  }
+  return Array.from(s).length >= 10 ? s : null;
+}
+
+/** URL 을 빼면 남는 내용이 거의 없는 요약(링크만 나열한 본문)인지 */
+export function isLinkOnly(text: string | null | undefined): boolean {
+  if (!text) return false;
+  return Array.from(text.replace(/https?:\/\/\S+/gi, "").replace(/[\s.,…]+/g, "")).length < 10;
+}

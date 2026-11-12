@@ -5,6 +5,8 @@ import { classify, itemLanguage } from "./classify";
 import { FetchError, mapLimit, redactUrl, withRetry } from "./http";
 import type { CollectedItem, TopicForClassify } from "./types";
 import { normalizeKeywords } from "@/lib/keywords";
+import { categorize } from "@/lib/categories";
+import { kstDate, primaryScore } from "@/lib/metrics";
 
 /**
  * 수집 파이프라인 (요구사항 1~3, 5)
@@ -166,6 +168,7 @@ export async function runCollection(opts: { userId?: string; trigger: "cron" | "
   if (opts.trigger === "cron") {
     const { data } = await admin.rpc("purge_expired_content");
     purged = typeof data === "number" ? data : 0;
+    await admin.rpc("purge_old_metric_snapshots");
   }
 
   return { startedAt, finishedAt: new Date().toISOString(), users: userIds.length, sources: results, purged };
@@ -210,6 +213,14 @@ async function storeForUser(admin: Admin, userId: string, source: Source, items:
       content_type: item.contentType,
       // 일치한 주제 키워드 + 출처 태그를 화면과 같은 규칙으로 정리 (src/lib/keywords.ts)
       keywords: normalizeKeywords([...matches.flatMap((m) => m.matched), ...item.tags], 10),
+      category: categorize({
+        title: item.title,
+        summary: item.summary,
+        keywords: item.tags,
+        content_type: item.contentType,
+        source_type: source.source_type,
+        source_slug: source.slug,
+      }),
       popularity: item.popularity,
       provenance: "collected",
       permission_status: source.permission_status,
@@ -226,6 +237,19 @@ async function storeForUser(admin: Admin, userId: string, source: Source, items:
     if (error) throw new Error(`콘텐츠 저장 실패: ${error.message}`);
 
     const idByUrl = new Map((data ?? []).map((r) => [r.original_url as string, r.id as string]));
+
+    // 반응 지표 일별 기록 (하루 1건, 같은 날 재수집 시 최신 값으로 갱신) → 증가량·순위 변동 계산용
+    const today = kstDate();
+    const snapshots = part.flatMap(({ item }) => {
+      const contentId = idByUrl.get(item.url);
+      const score = primaryScore(item.popularity);
+      return contentId && score !== null ? [{ content_id: contentId, user_id: userId, captured_on: today, score, popularity: item.popularity }] : [];
+    });
+    if (snapshots.length) {
+      const { error: snapErr } = await admin.from("content_metric_snapshots").upsert(snapshots, { onConflict: "content_id,captured_on" });
+      // 지표 기록 실패는 수집 결과에 영향을 주지 않음
+      if (snapErr) console.warn("[collect] 지표 기록 실패:", snapErr.message);
+    }
     const links = part.flatMap(({ item, matches }) => {
       const contentId = idByUrl.get(item.url);
       return contentId ? matches.map((m) => ({ content_id: contentId, topic_id: m.topicId, relevance_score: m.relevance })) : [];

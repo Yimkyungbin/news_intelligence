@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { listContent } from "@/lib/queries";
 import { normalizeKeywords } from "@/lib/keywords";
+import { itemCategory } from "@/lib/categories";
 import { rankContent, topKeywords } from "@/lib/content";
 import { filterAIAllowed } from "@/lib/ai/gate";
 import { AIError } from "@/lib/ai/openai";
@@ -10,7 +11,7 @@ import { aiUsageToday, DAILY_AI_LIMIT } from "@/lib/ai/service";
 import { daysAgoIso } from "@/lib/utils";
 import type { ContentItem } from "@/lib/types";
 import { splitPeriods } from "./compute";
-import { describeTrendScope, PERIODS, trendCacheKey, type TrendParams } from "./params";
+import { describeTrendScope, isFocused, PERIODS, trendCacheKey, type TrendParams } from "./params";
 
 /** 현재 기간 + 직전 동일 기간 콘텐츠 (조건 적용) */
 export async function loadTrendItems(userId: string, p: TrendParams) {
@@ -22,7 +23,7 @@ export async function loadTrendItems(userId: string, p: TrendParams) {
     contentType: p.type || undefined,
     language: p.lang || undefined,
   });
-  const filtered = p.kw ? all.filter((i) => normalizeKeywords(i.keywords, 20).includes(p.kw)) : all;
+  const filtered = all.filter((i) => (!p.kw || normalizeKeywords(i.keywords, 20).includes(p.kw)) && (!p.cat || itemCategory(i) === p.cat));
   return splitPeriods(filtered, days);
 }
 
@@ -36,6 +37,10 @@ export type TrendInsightContent = {
 
 /** AI 트렌드 시사점 생성 (AI 허용 콘텐츠만, 사용자 일일 한도 공유) */
 export async function generateTrendInsight(userId: string, p: TrendParams, topicName?: string): Promise<{ ok: boolean; message: string }> {
+  // 조건 없는 전체 흐름은 Daily Briefing AI 인사이트와 같은 분석 → 중복 AI 호출 차단
+  if (!isFocused(p)) {
+    return { ok: false, message: "전체 흐름은 Dashboard의 AI Daily Briefing 인사이트를 확인하세요. 키워드·주제·카테고리 등 조건을 고르면 그 조건의 AI 시사점을 만들 수 있습니다." };
+  }
   const db = createAdminClient();
   if (!db) return { ok: false, message: "서버 설정이 완료되지 않았습니다." };
   const { data: prof } = await db.from("profiles").select("ai_model").eq("id", userId).maybeSingle();

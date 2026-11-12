@@ -1,4 +1,4 @@
-import { Check, Minus, Power, Trash2 } from "lucide-react";
+import { Check, ExternalLink, Minus, Power, Trash2 } from "lucide-react";
 import { ActionButton, ConfirmButton } from "@/components/confirm-button";
 import { AddFeedForm, CollectNowButton } from "./collect-forms";
 import { deleteUserFeed, setUserFeedActive } from "./collect-actions";
@@ -48,6 +48,26 @@ function Flag({ on, label }: { on: boolean; label: string }) {
       {on ? <Check className="inline h-3.5 w-3.5" aria-hidden="true" /> : <Minus className="inline h-3.5 w-3.5" aria-hidden="true" />}
       <span className="sr-only">{on ? "허용" : "미허용"}</span>
     </span>
+  );
+}
+
+const isHttpUrl = (u: string | null): u is string => Boolean(u && /^https?:\/\//i.test(u));
+
+/** 소스 사이트·수집 주소(피드/API) 링크 (새 탭) */
+function SourceLinks({ homepage, feed, name }: { homepage: string | null; feed: string | null; name: string }) {
+  const links = [
+    isHttpUrl(homepage) ? { href: homepage, label: "사이트", aria: `${name} 사이트 열기 (새 탭)` } : null,
+    isHttpUrl(feed) && feed !== homepage ? { href: feed, label: "피드·API", aria: `${name} 수집 주소 열기 (새 탭)` } : null,
+  ].filter((l): l is { href: string; label: string; aria: string } => l !== null);
+  if (links.length === 0) return null;
+  return (
+    <p className="mt-0.5 flex flex-wrap gap-2 text-[11px]">
+      {links.map((l) => (
+        <a key={l.label} href={l.href} target="_blank" rel="noopener noreferrer nofollow" aria-label={l.aria} title={l.href} className="inline-flex items-center gap-0.5 text-primary hover:underline">
+          {l.label} <ExternalLink className="h-3 w-3" aria-hidden="true" />
+        </a>
+      ))}
+    </p>
   );
 }
 
@@ -155,6 +175,7 @@ export default async function SettingsPage() {
                         brandColor={s.brand_color}
                         size="md"
                       />
+                      <SourceLinks homepage={s.homepage_url} feed={s.source_url} name={s.name} />
                       {s.last_collected_at ? <p className="mt-0.5 text-[11px] text-muted-foreground">마지막 수집 {formatDateTime(s.last_collected_at)}</p> : null}
                     </td>
                     <td className="py-2 pr-2">

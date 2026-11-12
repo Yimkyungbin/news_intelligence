@@ -254,6 +254,46 @@ begin
   raise notice 'PASS isolation: stats, trend insights, source settings; shared translation cache readable';
 end $$;
 
+-- 19) 반응 지표 기록: 본인 것만 조회, 클라이언트 쓰기·정리 함수 호출 불가 / 카테고리 값 제한
+reset role;
+-- 준비 데이터는 서버(service role) 권한으로 넣음 (수집 콘텐츠 가드 트리거 통과)
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+insert into public.content_items (id, user_id, title, original_url, source_name, source_type, provenance, permission_status, category)
+  values ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-00000000000b', 'B metric item', 'https://x.example/metric-b',
+          'Hacker News', 'public_api', 'collected', 'NOT_VERIFIED', 'agent');
+insert into public.content_metric_snapshots (content_id, user_id, captured_on, score, popularity)
+  values ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-00000000000b', current_date, 10, '{"points":10}');
+do $$
+begin
+  insert into public.content_items (user_id, title, original_url, source_name, source_type, provenance, permission_status, category)
+    values ('00000000-0000-0000-0000-00000000000b', 'bad', 'https://x.example/bad-cat', 'x', 'public_api', 'collected', 'NOT_VERIFIED', 'gossip');
+  raise exception 'SHOULD_NOT_REACH';
+exception when others then
+  assert sqlerrm <> 'SHOULD_NOT_REACH', 'category must be one of 8 slugs';
+end $$;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare n int;
+begin
+  select count(*) into n from public.content_metric_snapshots where content_id = '00000000-0000-0000-0000-0000000000f1';
+  assert n = 0, 'A must not see B metric snapshots';
+  begin
+    insert into public.content_metric_snapshots (content_id, user_id, captured_on, score)
+      select id, user_id, current_date, 999 from public.content_items where user_id = '00000000-0000-0000-0000-00000000000a' limit 1;
+    raise exception 'SHOULD_NOT_REACH';
+  exception when others then
+    assert sqlerrm <> 'SHOULD_NOT_REACH', 'client must not write metric snapshots';
+  end;
+  begin
+    perform public.purge_old_metric_snapshots();
+    raise exception 'SHOULD_NOT_REACH';
+  exception when others then
+    assert sqlerrm <> 'SHOULD_NOT_REACH', 'client must not call purge_old_metric_snapshots';
+  end;
+  raise notice 'PASS metric snapshots: own only, server-only writes; category restricted';
+end $$;
+
 -- 15) 주제 인사이트·브리핑은 본인 것만 조회
 reset role;
 insert into public.topic_insights (id, user_id, topic_id, content, model_name, provider)

@@ -1,13 +1,39 @@
 import type { ContentItem } from "@/lib/types";
 import { mergePluralCounts, normalizeKeywords } from "./keywords.ts";
+import { primaryScore } from "./metrics.ts";
+import { cleanPostSummary, cleanPostTitle, isLinkOnly } from "./collectors/text.ts";
+
+/** 화면 표시용 제목: SNS 게시글은 URL·멘션을 제거 (기존에 저장된 콘텐츠 포함) */
+export function displayTitle(item: Pick<ContentItem, "title" | "summary" | "content_type">): string {
+  return item.content_type === "post" ? cleanPostTitle(item.title, item.summary) : item.title;
+}
+
+/** 화면 표시용 요약: SNS 게시글은 URL·멘션 제거 + 제목과 겹치는 앞부분 제거 */
+export function displaySummary(item: Pick<ContentItem, "title" | "summary" | "content_type">): string | null {
+  if (item.content_type === "post") return cleanPostSummary(item.summary, displayTitle(item));
+  // 링크만 나열된 요약(HN 본문 등)은 의미가 없어 숨김
+  return isLinkOnly(item.summary) ? null : item.summary;
+}
+
+export const CONTENT_TYPE_LABELS: Record<string, string> = {
+  article: "기사",
+  post: "SNS",
+  paper: "논문",
+  repository: "저장소",
+  model: "모델",
+  discussion: "토론",
+  video: "영상",
+  other: "기타",
+};
 
 /** 출처가 실제로 제공한 지표만 표시용 라벨로 변환 */
 const METRIC_LABELS: Record<string, string> = {
   points: "points",
   comments: "댓글",
   stars: "stars",
-  upvotes: "upvotes",
+  upvotes: "추천",
   likes: "likes",
+  citations: "인용",
   downloads: "downloads",
 };
 
@@ -16,8 +42,9 @@ export const METRIC_HELP: Record<string, string> = {
   points: "Hacker News 이용자 추천 점수",
   comments: "출처에 달린 댓글 수",
   stars: "GitHub 저장소 Star 수 (관심 표시)",
-  upvotes: "커뮤니티 추천 수",
-  likes: "Hugging Face 좋아요 수",
+  upvotes: "커뮤니티 추천 수 (Hugging Face Daily Papers 등)",
+  likes: "좋아요 수",
+  citations: "OpenAlex 집계 피인용 수",
   downloads: "Hugging Face 최근 다운로드 수",
 };
 
@@ -30,12 +57,7 @@ export function popularityEntries(p: Record<string, unknown> | null | undefined)
 
 /** 근거 있는 단일 인기 점수: 출처 제공 지표의 대표값 (없으면 null) */
 export function popularityScore(item: Pick<ContentItem, "popularity">): number | null {
-  const p = item.popularity ?? {};
-  for (const k of ["points", "upvotes", "stars", "likes", "downloads"]) {
-    const v = p[k];
-    if (typeof v === "number" && v > 0) return v;
-  }
-  return null;
+  return primaryScore(item.popularity);
 }
 
 type Rankable = Pick<ContentItem, "id" | "popularity" | "published_at" | "collected_at" | "source_name"> & {
@@ -104,8 +126,12 @@ export function rankContent<T extends Rankable>(items: T[], limit: number) {
   unranked.sort((a, b) => recency(b).localeCompare(recency(a)) || a.id.localeCompare(b.id));
   const result = [...picked.map((c) => c.item), ...unranked].slice(0, limit);
   const notes: Record<string, string> = {};
-  for (const c of picked) notes[c.item.id] = `${c.item.source_name} 내 ${c.rank}위/${c.total}`;
-  return { items: result, ranked: picked.length > 0, notes };
+  const positions: Record<string, { rank: number; total: number }> = {};
+  for (const c of picked) {
+    notes[c.item.id] = `${c.item.source_name} 내 ${c.rank}위/${c.total}`;
+    positions[c.item.id] = { rank: c.rank, total: c.total };
+  }
+  return { items: result, ranked: picked.length > 0, notes, positions };
 }
 
 /** 키워드 빈도 집계 (Today's Intelligence). 콘텐츠당 1회, 정리된 키워드 기준 */

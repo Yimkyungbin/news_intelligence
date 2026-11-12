@@ -147,7 +147,13 @@ describe("트렌드 시사점 (집계)", () => {
 
   test("조건 파싱: 허용 값만, 잘못된 주제 id·필터 주입 차단, 캐시 키는 정렬·개수 제외", () => {
     const p = parseTrendParams({ period: "monthly", limit: "50", type: "paper", lang: "xx", sort: "latest", topic: "1,2)", kw: "CS.AI" });
-    assert.deepEqual(p, { period: "monthly", limit: 50, type: "paper", lang: "", sort: "latest", topic: "", kw: "ai" });
+    assert.deepEqual(p, { period: "monthly", limit: 50, type: "paper", lang: "", sort: "latest", topic: "", kw: "ai", cat: "" });
+    // 카테고리: 허용 slug 만, 미지정 시 기존 캐시 키와 동일, 지정 시 키·범위 설명에 반영
+    assert.equal(parseTrendParams({ cat: "agent" }).cat, "agent");
+    assert.equal(parseTrendParams({ cat: "x),or(" }).cat, "");
+    assert.equal(trendCacheKey(p), JSON.stringify({ period: "monthly", type: "paper", lang: "", topic: "", kw: "ai" }));
+    assert.notEqual(trendCacheKey({ ...p, cat: "agent" }), trendCacheKey(p));
+    assert.match(describeTrendScope({ ...p, cat: "agent" }), /카테고리: 에이전트/);
     const id = "00000000-0000-4000-8000-000000000001";
     assert.equal(parseTrendParams({ topic: id }, []).topic, "");
     assert.equal(parseTrendParams({ topic: id }, [id]).topic, id);

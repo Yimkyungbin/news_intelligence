@@ -1,6 +1,8 @@
-# LinkedIn Intelligence Hub
+# Insight Radar (인사이트 레이더)
 
-개인화 AI 지식·트렌드 인텔리전스 플랫폼 (MVP Phase 1~3: 기본 서비스 · 콘텐츠 수집 · AI 분석)
+AI·IT 트렌드와 논문의 변화를 감지하는 개인화 인텔리전스 (MVP Phase 1~3: 기본 서비스 · 콘텐츠 수집 · AI 분석)
+
+> 이전 이름: LinkedIn Intelligence Hub. 저장소·로컬 Supabase 프로젝트 ID(`linkedin_intelligence`)는 기존 환경 호환을 위해 그대로 둡니다.
 
 > LinkedIn과 제휴하지 않은 독립 서비스입니다. LinkedIn 데이터 수집을 전제로 하지 않으며, 모든 콘텐츠를 출처·권한 메타데이터와 함께 관리합니다. 근거는 [docs/api-feasibility-matrix.md](docs/api-feasibility-matrix.md)에 정리했습니다.
 

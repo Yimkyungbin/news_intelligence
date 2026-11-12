@@ -6,6 +6,7 @@ import { DailyTotalChart, KeywordTrendChart } from "@/components/stats/stats-cha
 import { InfoTip } from "@/components/info-tip";
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { RebuildStatsButton } from "./rebuild-button";
+import { LiveOverview } from "@/components/stats/live-overview";
 import { cn, formatDate } from "@/lib/utils";
 
 export const metadata = { title: "Statistics" };
@@ -69,6 +70,11 @@ export default async function StatisticsPage({ searchParams }: PageProps<"/stati
         actions={<RebuildStatsButton />}
       />
 
+      <section aria-label="실시간 요약" className="mb-6">
+        <LiveOverview userId={user.id} />
+      </section>
+
+      <h2 className="mb-2 text-sm font-semibold">기간별 일자 통계</h2>
       <div className="mb-4 flex flex-wrap items-center gap-1.5" role="group" aria-label="기간 선택">
         {RANGES.map((r) => (
           <Link

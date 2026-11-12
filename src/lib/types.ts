@@ -76,6 +76,8 @@ export type ContentItem = {
   collected_at: string;
   language: string;
   content_type: string;
+  /** 고정 8종 카테고리 (src/lib/categories.ts). 기존 콘텐츠는 null → 화면에서 계산 */
+  category: string | null;
   keywords: string[];
   popularity: Record<string, number>;
   provenance: "demo" | "collected" | "user_provided" | "linkedin_api";
@@ -92,7 +94,7 @@ export type ContentItem = {
 export type ContentAIMeta = { title_ko: string | null; summary_ko: string | null; implication_ko: string | null; is_demo: boolean };
 
 export const CONTENT_SELECT =
-  "id,title,summary,original_url,author,author_title,author_company,source_name,source_type,published_at,collected_at,language,content_type,keywords,popularity,provenance,permission_status,ai_processing_allowed,external_llm_allowed,ai_processing_status,source:data_sources(slug,logo_key,homepage_url,brand_color),topic_links:content_topics(relevance_score,topic:topics(id,name))";
+  "id,title,summary,original_url,author,author_title,author_company,source_name,source_type,published_at,collected_at,language,content_type,category,keywords,popularity,provenance,permission_status,ai_processing_allowed,external_llm_allowed,ai_processing_status,source:data_sources(slug,logo_key,homepage_url,brand_color),topic_links:content_topics(relevance_score,topic:topics(id,name))";
 
 export type SavedPost = {
   id: string;

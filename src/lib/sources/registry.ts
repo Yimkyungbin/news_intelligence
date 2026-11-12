@@ -81,6 +81,7 @@ export const LOGO_REGISTRY: Record<string, RegistryEntry> = {
   medium: icon(siMedium, "Medium"),
   devto: icon(siDevdotto, "dev.to"),
   kaggle: icon(siKaggle, "Kaggle"),
+  openalex: mono("OA", "#C12D2E", "OpenAlex"),
   // 국내 IT 뉴스·커뮤니티
   geeknews: mono("GN", "#2E7D32", "GeekNews"),
   yozm: mono("요", "#5A2FE0", "요즘IT"),
@@ -139,6 +140,7 @@ const HOST_MAP: Array<[string, string]> = [
   ["medium.com", "medium"],
   ["dev.to", "devto"],
   ["kaggle.com", "kaggle"],
+  ["openalex.org", "openalex"],
   ["news.hada.io", "geeknews"],
   ["yozm.wishket.com", "yozm"],
   ["zdnet.co.kr", "zdnet"],

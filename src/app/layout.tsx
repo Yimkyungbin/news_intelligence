@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
+import { BRAND } from "@/lib/brand";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,10 +17,10 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "LinkedIn Intelligence Hub",
-    template: "%s · LinkedIn Intelligence Hub",
+    default: BRAND.name,
+    template: `%s · ${BRAND.name}`,
   },
-  description: "개인화 AI 지식·트렌드 인텔리전스 플랫폼",
+  description: BRAND.tagline,
   robots: { index: false, follow: false },
 };
 

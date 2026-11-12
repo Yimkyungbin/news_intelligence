@@ -2,7 +2,7 @@
 
 ## 소개
 
-LinkedIn Intelligence Hub는 한국어 사용자를 기본 대상으로 한다. 이 Spec은 Kiro 채팅창 응답의 한국어 작성(최우선), Spec 문서·UI·코드 주석의 한국어 작성 규칙과, 사용자가 입력하거나 수집된 한국어 텍스트를 일관되게 저장·검색·표시하기 위한 처리 규칙을 정의한다.
+Insight Radar(인사이트 레이더, 이전 이름 LinkedIn Intelligence Hub)는 한국어 사용자를 기본 대상으로 한다. 이 Spec은 Kiro 채팅창 응답의 한국어 작성(최우선), Spec 문서·UI·코드 주석의 한국어 작성 규칙과, 사용자가 입력하거나 수집된 한국어 텍스트를 일관되게 저장·검색·표시하기 위한 처리 규칙을 정의한다.
 
 규칙 원문: `.kiro/steering/korean-language.md`
 
