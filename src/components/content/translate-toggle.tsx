@@ -7,7 +7,7 @@ import { setTranslatePreference } from "@/app/(app)/content/pref-actions";
 import { InfoTip } from "@/components/info-tip";
 import { cn } from "@/lib/utils";
 
-/** Dashboard·Trending 상단 "한국어로 보기" 토글 */
+/** "한국어로 보기" 토글 (Dashboard·Trending·Papers·주제 상세·Saved Posts·Knowledge Base 공통, 사용자 설정 하나) */
 export function TranslateToggle({ on: initial }: { on: boolean }) {
   const [on, setOn] = useOptimistic(initial);
   const [pending, start] = useTransition();

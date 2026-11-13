@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { CONTENT_SELECT, type SavedPost } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 import { ContentCard } from "@/components/content/content-card";
+import { TranslateToggle } from "@/components/content/translate-toggle";
+import { getAIMeta, getTranslatePref } from "@/lib/queries";
 import { Badge, EmptyState, Input, PageHeader } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 
@@ -25,9 +27,11 @@ export default async function KnowledgePage({ searchParams }: PageProps<"/knowle
   if (error) throw new Error("Knowledge Base를 불러오지 못했습니다.");
 
   let items = (data ?? []) as unknown as SavedPost[];
+  // 한국어로 보기: 번역(공유 캐시)과 사용자 설정
+  const [meta, translate] = await Promise.all([getAIMeta(items.map((p) => p.content.original_url)), getTranslatePref(user.id)]);
   if (q) {
     items = items.filter((p) =>
-      [p.content.title, p.content.summary, p.notes, ...p.tags, ...p.content.keywords].filter(Boolean).some((s) => (s as string).toLowerCase().includes(q)),
+      [p.content.title, p.content.summary, meta.get(p.content.original_url)?.title_ko, meta.get(p.content.original_url)?.summary_ko, p.notes, ...p.tags, ...p.content.keywords].filter(Boolean).some((s) => (s as string).toLowerCase().includes(q)),
     );
   }
 
@@ -36,6 +40,7 @@ export default async function KnowledgePage({ searchParams }: PageProps<"/knowle
       <PageHeader
         title="Knowledge Base"
         description="Saved Posts에서 'Knowledge Base에 추가'한 콘텐츠를 개인 지식으로 관리합니다. RAG 기반 의미 검색은 Phase 4에서 추가됩니다."
+        actions={<TranslateToggle on={translate} />}
       />
       <Form action="/knowledge" className="mb-4 flex gap-2" role="search">
         <label htmlFor="kb-q" className="sr-only">
@@ -55,6 +60,8 @@ export default async function KnowledgePage({ searchParams }: PageProps<"/knowle
               key={p.id}
               item={p.content}
               saved
+              ai={meta.get(p.content.original_url)}
+              translate={translate}
               footer={
                 <div className="mt-2 flex flex-col gap-1.5 text-xs">
                   {p.notes ? <p className="whitespace-pre-wrap rounded-md bg-muted/60 p-2">{p.notes}</p> : null}

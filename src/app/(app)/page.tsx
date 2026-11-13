@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowRight, CalendarDays, Flame, Sparkles, TrendingUp } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { getSavedContentIds, getTranslatePref } from "@/lib/queries";
+import { getAIMeta, getSavedContentIds, getTranslatePref } from "@/lib/queries";
 import { getDisabledSourceIds } from "@/lib/source-settings";
 import { CATEGORIES, categoryDef, isCategorySlug } from "@/lib/categories";
 import { BOARD_PERIODS, loadTrendBoard, type BoardPeriod } from "@/lib/trends/board";
@@ -89,7 +89,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
     supabase
       .from("topics")
       .select(
-        "id,name,priority,content_topics(content:content_items!inner(id,source_id,title,original_url,published_at,collected_at,provenance,source_name,source:data_sources(logo_key,homepage_url,brand_color)))",
+        "id,name,priority,content_topics(content:content_items!inner(id,source_id,title,original_url,language,published_at,collected_at,provenance,source_name,source:data_sources(logo_key,homepage_url,brand_color)))",
       )
       .eq("user_id", user.id)
       .eq("is_active", true)
@@ -121,6 +121,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
     source_id: string | null;
     title: string;
     original_url: string;
+    language: string;
     published_at: string | null;
     collected_at: string;
     provenance: string;
@@ -128,18 +129,25 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
     source: { logo_key: string | null; homepage_url: string | null; brand_color: string | null } | null;
   };
   type TopicRow = { id: string; name: string; priority: number; content_topics: { content: TopicContent }[] };
-  const topics: TopicUpdate[] = ((topicsRes.data ?? []) as unknown as TopicRow[]).map((t) => {
-    const recent = t.content_topics
+  const topicRows = ((topicsRes.data ?? []) as unknown as TopicRow[]).map((t) => ({
+    ...t,
+    recent: t.content_topics
       .map((ct) => ct.content)
       .filter((c) => (c.published_at ?? c.collected_at) >= weekIso && !(c.source_id && disabledSources.has(c.source_id)))
-      .sort((a, b) => (b.published_at ?? b.collected_at).localeCompare(a.published_at ?? a.collected_at));
+      .sort((a, b) => (b.published_at ?? b.collected_at).localeCompare(a.published_at ?? a.collected_at)),
+  }));
+  // 한국어로 보기: 펼치기 목록(주제별 최신 5건) 제목도 번역 표시
+  const topicMeta = translate ? await getAIMeta(topicRows.flatMap((t) => t.recent.slice(0, 5).map((c) => c.original_url))) : new Map();
+  const topicTitle = (c: TopicContent) => (translate && c.language !== "ko" && topicMeta.get(c.original_url)?.title_ko) || c.title;
+  const topics: TopicUpdate[] = topicRows.map((t) => {
+    const recent = t.recent;
     return {
       id: t.id,
       name: t.name,
       count: recent.length,
       items: recent.slice(0, 5).map((c) => ({
         id: c.id,
-        title: c.title,
+        title: topicTitle(c),
         date: c.published_at ?? c.collected_at,
         sourceName: c.source_name,
         logo: resolveSourceLogo({ logoKey: c.source?.logo_key, url: c.original_url, homepageUrl: c.source?.homepage_url, brandColor: c.source?.brand_color, name: c.source_name, isDemo: c.provenance === "demo" }),

@@ -11,6 +11,7 @@ import json
 import re
 import sys
 import time
+import urllib.parse
 import urllib.request
 import uuid
 
@@ -635,7 +636,25 @@ def run():
                 expect(card.get_by_text("시사점", exact=True)).to_be_visible()
                 expect(card.get_by_role("link", name="Agentic AI", exact=True)).to_be_visible()
 
+                # 주제 상세·Saved Posts·Knowledge Base 도 같은 번역 표시 (저장은 SQL 로 준비 후 정리)
+                sql(
+                    "insert into public.saved_posts (user_id, content_id, in_knowledge_base) "
+                    f"select user_id, id, true from public.content_items where original_url = '{url}'"
+                )
+                topic_id = sql(f"select t.id from public.topics t join public.profiles p on p.id = t.user_id where p.email = '{EMAIL}' and t.name = 'Agentic AI'")
+                try:
+                    for path in [f"/topics/{topic_id}", "/saved", "/knowledge"]:
+                        page.goto(f"{BASE}{path}")
+                        expect(page.get_by_role("switch", name="한국어로 보기")).to_be_visible()
+                        expect(page.get_by_role("button", name=f"[DEMO 번역] {title}").first).to_be_visible()
+                    # 번역 제목으로 검색
+                    page.goto(f"{BASE}/saved?q=" + urllib.parse.quote("DEMO 번역"))
+                    expect(page.get_by_role("button", name=f"[DEMO 번역] {title}").first).to_be_visible()
+                finally:
+                    sql(f"delete from public.saved_posts where content_id in (select id from public.content_items where original_url = '{url}')")
+
                 # 번역 끄기 → 원문 제목
+                page.goto(f"{BASE}/trending?period=weekly&limit=50")
                 page.get_by_role("switch", name="한국어로 보기").click()
                 page.wait_for_timeout(800)
                 page.reload()
