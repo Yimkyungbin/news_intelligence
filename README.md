@@ -1,6 +1,8 @@
-# LinkedIn Intelligence Hub
+# Insight Radar (인사이트 레이더)
 
-개인화 AI 지식·트렌드 인텔리전스 플랫폼 (MVP Phase 1~3: 기본 서비스 · 콘텐츠 수집 · AI 분석)
+AI·IT 트렌드와 논문의 변화를 감지하는 개인화 인텔리전스 (MVP Phase 1~3: 기본 서비스 · 콘텐츠 수집 · AI 분석)
+
+> 이전 이름: LinkedIn Intelligence Hub. 저장소·로컬 Supabase 프로젝트 ID(`linkedin_intelligence`)는 기존 환경 호환을 위해 그대로 둡니다.
 
 > LinkedIn과 제휴하지 않은 독립 서비스입니다. LinkedIn 데이터 수집을 전제로 하지 않으며, 모든 콘텐츠를 출처·권한 메타데이터와 함께 관리합니다. 근거는 [docs/api-feasibility-matrix.md](docs/api-feasibility-matrix.md)에 정리했습니다.
 
@@ -83,7 +85,7 @@ erDiagram
 ```
 
 - `profiles`가 요구사항의 `users` 테이블 역할을 합니다 (Supabase `auth.users`와 1:1).
-- `influencers.is_following`으로 Influencers와 My Following을 구분합니다.
+- Influencers 메뉴 하나에서 관리하며, `influencers.is_following`으로 탭(전체 / 팔로우 중 / 팔로우 후보)을 나눕니다. 이전의 My Following(`/following`)은 '팔로우 중' 탭으로 이동합니다.
 - `data_sources.logo_key`와 `brand_color`로 출처 로고를 표시합니다.
 
 ## 4. 출처 로고 규칙

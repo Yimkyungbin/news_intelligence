@@ -6,6 +6,8 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { CONTENT_SELECT, type Folder, type SavedPost } from "@/lib/types";
 import { ContentCard } from "@/components/content/content-card";
+import { TranslateToggle } from "@/components/content/translate-toggle";
+import { getAIMeta, getTranslatePref } from "@/lib/queries";
 import { ConfirmButton } from "@/components/confirm-button";
 import { Badge, EmptyState, Input, PageHeader } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
@@ -41,10 +43,12 @@ export default async function SavedPage({ searchParams }: PageProps<"/saved">) {
 
   const folders = (folderRows ?? []) as Folder[];
   let posts = (data ?? []) as unknown as SavedPost[];
-  // 제목·요약·메모·태그·출처 텍스트 검색 (서버 측, 사용자 데이터 범위 내)
+  // 한국어로 보기: 번역(공유 캐시)과 사용자 설정
+  const [meta, translate] = await Promise.all([getAIMeta(posts.map((p) => p.content.original_url)), getTranslatePref(user.id)]);
+  // 제목·요약(번역 포함)·메모·태그·출처 텍스트 검색 (서버 측, 사용자 데이터 범위 내)
   if (q) {
     posts = posts.filter((p) =>
-      [p.content.title, p.content.summary, p.notes, p.content.source_name, p.content.author, ...p.tags]
+      [p.content.title, p.content.summary, meta.get(p.content.original_url)?.title_ko, meta.get(p.content.original_url)?.summary_ko, p.notes, p.content.source_name, p.content.author, ...p.tags]
         .filter(Boolean)
         .some((s) => (s as string).toLowerCase().includes(q)),
     );
@@ -60,7 +64,7 @@ export default async function SavedPage({ searchParams }: PageProps<"/saved">) {
 
   return (
     <>
-      <PageHeader title="Saved Posts" description="북마크한 콘텐츠를 폴더·태그·메모로 관리합니다." />
+      <PageHeader title="Saved Posts" description="북마크한 콘텐츠를 폴더·태그·메모로 관리합니다." actions={<TranslateToggle on={translate} />} />
       <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
         <aside className="flex flex-col gap-4" aria-label="폴더 및 태그">
           <div>
@@ -137,6 +141,8 @@ export default async function SavedPage({ searchParams }: PageProps<"/saved">) {
                 key={p.id}
                 item={p.content}
                 saved
+                ai={meta.get(p.content.original_url)}
+                translate={translate}
                 footer={
                   <SavedPostEditor
                     savedId={p.id}

@@ -32,6 +32,12 @@
 | GitHub | search/repositories (최근 30일, llm·ai-agents·rag) | 선택 `GITHUB_TOKEN` | stars | 200 | 활성 | NOT_VERIFIED | 비인증 검색 분당 10회 |
 | arXiv | export API (cs.AI/CL/LG 최신 50) | 불필요 | 없음 | 200 | 활성 | NOT_VERIFIED | 1회 요청, 논문별 라이선스 상이 |
 | Hugging Face | api/models (trending 30) | 불필요 | likes, downloads | 200 | 활성 | NOT_VERIFIED | |
+| Hugging Face Daily Papers | api/daily_papers (최근 50) | 불필요 | upvotes, comments | 200 | 활성 | NOT_VERIFIED | 2026-11-11 확인. HF 논문 페이지를 원문으로 저장, AI 요약·키워드는 출처 제공값 |
+| OpenAlex (AI 분야) | works (하위 분야 1702 AI·1707 CV, 최근 30일 인용 상위 40) | 선택 `OPENALEX_API_KEY` | citations | 200 | 활성 | NOT_VERIFIED | 2026-11-11 확인. 데이터 CC0. 키 없으면 IP 공용 하루 $0.10 한도(이 호출 $0.0001) |
+| arXiv 시스템·보안·SE | 공식 RSS (cs.SE+cs.CR+cs.DC+cs.IR, 최대 100) | 불필요 | 없음 | 200 | 활성 | NOT_VERIFIED | 2026-11-11 확인. export API 는 429(요청 한도)로 RSS 사용, 요청 간 3초 |
+| arXiv 비전·로보틱스·멀티에이전트 | 공식 RSS (cs.CV+cs.RO+cs.MA, 최대 100) | 불필요 | 없음 | 200 | 활성 | NOT_VERIFIED | 2026-11-11 확인. 주말은 공지 없음(0건) |
+| OpenReview | API v2 | - | - | 403 (Challenge) | 미추가 | NOT_VERIFIED | 2026-11-11 확인. 봇 확인 요구로 자동 수집 불가 |
+| Semantic Scholar | Graph API | 권장(키) | citations | - | 미추가 | NOT_VERIFIED | 비인증은 공용 한도 경쟁·약관 검토 필요. 추후 검토 |
 | OpenAI News | RSS | 불필요 | 없음 | 200 | 활성 | NOT_VERIFIED | |
 | Google AI Blog | RSS | 불필요 | 없음 | 200 | 활성 | NOT_VERIFIED | |
 | Google DeepMind Blog | RSS | 불필요 | 없음 | 200 | 활성 | NOT_VERIFIED | |

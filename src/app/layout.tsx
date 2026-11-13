@@ -1,25 +1,32 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
+import { BRAND } from "@/lib/brand";
 
-const geistSans = Geist({
+// Geist 가변 글꼴(굵기 100~900)을 저장소에 포함 (SIL OFL 1.1, src/app/fonts/OFL.txt)
+// 빌드 시 Google Fonts 네트워크 요청에 의존하지 않음. 한국어는 globals.css 의 Apple SD Gothic Neo / Noto Sans KR 로 대체
+const geistSans = localFont({
+  src: "./fonts/Geist-Variable-latin.woff2",
   variable: "--font-geist-sans",
-  subsets: ["latin"],
+  weight: "100 900",
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
+const geistMono = localFont({
+  src: "./fonts/GeistMono-Variable-latin.woff2",
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: "100 900",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
   title: {
-    default: "LinkedIn Intelligence Hub",
-    template: "%s · LinkedIn Intelligence Hub",
+    default: BRAND.name,
+    template: `%s · ${BRAND.name}`,
   },
-  description: "개인화 AI 지식·트렌드 인텔리전스 플랫폼",
+  description: BRAND.tagline,
   robots: { index: false, follow: false },
 };
 

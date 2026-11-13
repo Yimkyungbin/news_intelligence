@@ -4,7 +4,8 @@ import { ArrowLeft } from "lucide-react";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { getSavedContentIds, listContent } from "@/lib/queries";
+import { getAIMeta, getSavedContentIds, getTranslatePref, listContent } from "@/lib/queries";
+import { TranslateToggle } from "@/components/content/translate-toggle";
 import { topKeywords } from "@/lib/content";
 import { formatDate } from "@/lib/utils";
 import { ContentCard } from "@/components/content/content-card";
@@ -41,13 +42,15 @@ export default async function TopicDetailPage({ params }: PageProps<"/topics/[id
       .maybeSingle(),
   ]);
   const kw = topKeywords(items, 10);
+  // 한국어로 보기: 번역(공유 캐시)과 사용자 설정
+  const [meta, translate] = await Promise.all([getAIMeta(items.map((i) => i.original_url)), getTranslatePref(user.id)]);
 
   return (
     <>
       <Link href="/topics" className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-3 w-3" /> My Topics
       </Link>
-      <PageHeader title={topic.name} description={topic.description ?? undefined} />
+      <PageHeader title={topic.name} description={topic.description ?? undefined} actions={<TranslateToggle on={translate} />} />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="flex flex-col gap-2 lg:col-span-2">
@@ -55,7 +58,7 @@ export default async function TopicDetailPage({ params }: PageProps<"/topics/[id
           {items.length === 0 ? (
             <EmptyState title="연결된 콘텐츠가 없습니다" description="Phase 2 수집이 활성화되면 키워드와 일치하는 콘텐츠가 자동 분류됩니다." />
           ) : (
-            items.map((it) => <ContentCard key={it.id} item={it} saved={saved.has(it.id)} />)
+            items.map((it) => <ContentCard key={it.id} item={it} saved={saved.has(it.id)} ai={meta.get(it.original_url)} translate={translate} />)
           )}
         </div>
         <div className="flex flex-col gap-4">

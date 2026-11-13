@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Sparkles, X } from "lucide-react";
 import { NAV_ITEMS } from "./nav";
 import { cn } from "@/lib/utils";
+import { BRAND } from "@/lib/brand";
 
 function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
@@ -46,9 +47,9 @@ export function Brand() {
         <Sparkles className="h-4 w-4" aria-hidden="true" />
       </span>
       <span className="text-sm font-semibold leading-tight">
-        LinkedIn
+        {BRAND.primary}
         <br />
-        <span className="text-muted-foreground">Intelligence Hub</span>
+        <span className="text-muted-foreground">{BRAND.secondary}</span>
       </span>
     </Link>
   );

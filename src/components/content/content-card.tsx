@@ -3,7 +3,9 @@ import { ExternalLink, Languages, Lightbulb, PanelRightOpen, ShieldOff } from "l
 import { SourceBadge } from "@/components/sources/source-badge";
 import { SaveButton } from "./save-button";
 import { OpenDetailButton } from "./content-detail";
-import { popularityEntries } from "@/lib/content";
+import { displaySummary, displayTitle, popularityEntries } from "@/lib/content";
+import { itemCategory } from "@/lib/categories";
+import { CategoryChip } from "@/components/trends/category-chip";
 import { normalizeKeywords } from "@/lib/keywords";
 import { cn, formatDate } from "@/lib/utils";
 import type { ContentAIMeta, ContentItem } from "@/lib/types";
@@ -44,8 +46,9 @@ export function ContentCard({
     .map((l) => l.topic!);
   // 번역: 토글이 켜져 있고, 외국어 콘텐츠이며, 번역이 있을 때만
   const translated = translate && item.language !== "ko" && Boolean(ai?.title_ko);
-  const title = translated ? ai!.title_ko! : item.title;
-  const summary = translate && item.language !== "ko" && ai?.summary_ko ? ai.summary_ko : item.summary;
+  const original = displayTitle(item);
+  const title = translated ? ai!.title_ko! : original;
+  const summary = translate && item.language !== "ko" && ai?.summary_ko ? ai.summary_ko : displaySummary(item);
 
   return (
     <article
@@ -90,8 +93,9 @@ export function ContentCard({
           </div>
         </div>
 
-        {topics.length ? (
-          <div className="mt-1.5 flex flex-wrap gap-1" aria-label="연결된 관심 주제">
+        {topics.length || item.content_type ? (
+          <div className="mt-1.5 flex flex-wrap gap-1" aria-label="카테고리·연결된 관심 주제">
+            <CategoryChip slug={itemCategory(item)} />
             {topics.map((t) => (
               <Link key={t.id} href={`/topics/${t.id}`} className="rounded-full border border-primary/30 bg-primary/5 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/10">
                 {t.name}
@@ -107,7 +111,7 @@ export function ContentCard({
           <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground" title="원문 제목">
             <Languages className="h-3 w-3 shrink-0" aria-hidden="true" />
             <span className="shrink-0 rounded bg-secondary px-1">{ai?.is_demo ? "DEMO 번역" : "번역"}</span>
-            <span className="truncate">원문: {item.title}</span>
+            <span className="truncate">원문: {original}</span>
           </p>
         ) : null}
 

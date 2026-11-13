@@ -36,7 +36,7 @@ function H({ n, children }: { n: number; children: React.ReactNode }) {
   );
 }
 
-export function AIInsightsBlock({ ai, compact = false }: { ai: BriefingContent["ai_insights"]; compact?: boolean }) {
+export function AIInsightsBlock({ ai, compact = false, columns = false }: { ai: BriefingContent["ai_insights"]; compact?: boolean; columns?: boolean }) {
   if (ai.status !== "generated") {
     return <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">{ai.reason}</p>;
   }
@@ -48,9 +48,9 @@ export function AIInsightsBlock({ ai, compact = false }: { ai: BriefingContent["
         {ai.headline}
         {ai.is_demo ? <Badge variant="demo">DEMO 모의 AI</Badge> : null}
       </p>
-      <ol className="flex flex-col gap-2">
+      <ol className={columns ? "grid gap-3 md:grid-cols-2" : "flex flex-col gap-2"}>
         {items.map((i, idx) => (
-          <li key={`${idx}-${i.title}`} className="text-sm">
+          <li key={`${idx}-${i.title}`} className={columns ? "rounded-md bg-background/60 p-2.5 text-sm" : "text-sm"}>
             <p className="font-medium">
               {idx + 1}. {i.title}
             </p>
@@ -95,6 +95,21 @@ export function BriefingSummary({ b }: { b: BriefingContent }) {
         <p className="mb-1 text-[11px] font-semibold text-muted-foreground">AI 핵심 인사이트</p>
         <AIInsightsBlock ai={b.ai_insights} compact />
       </div>
+    </div>
+  );
+}
+
+/**
+ * 대시보드 최상단 브리핑: 24시간 건수 + AI 핵심 인사이트만
+ * (키워드·주제 변화는 같은 화면의 '급상승 키워드'·'트렌드 한눈에'에 있으므로 중복 표시하지 않음)
+ */
+export function BriefingHero({ b }: { b: BriefingContent }) {
+  return (
+    <div className="flex flex-col gap-2 text-sm">
+      <p className="text-xs text-muted-foreground">
+        최근 24시간 콘텐츠 <b className="text-base font-bold tabular-nums text-foreground">{b.stats.today}</b>건 (전일 대비 <Delta value={b.stats.delta} />)
+      </p>
+      <AIInsightsBlock ai={b.ai_insights} columns />
     </div>
   );
 }
@@ -176,7 +191,7 @@ export function BriefingFull({ b }: { b: BriefingContent }) {
       <section aria-label="주요 인플루언서 콘텐츠">
         <H n={4}>주요 인플루언서 콘텐츠</H>
         {b.influencer_content.length === 0 ? (
-          <p className="text-xs text-muted-foreground">최근 24시간 My Following에 등록된 콘텐츠 링크가 없습니다.</p>
+          <p className="text-xs text-muted-foreground">최근 24시간 팔로우한 인물(Influencers)에 등록된 콘텐츠 링크가 없습니다.</p>
         ) : (
           <ul className="flex flex-col gap-1 text-sm">
             {b.influencer_content.map((l) => (

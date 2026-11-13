@@ -1,6 +1,6 @@
 // 공개 API 응답 파서: Hacker News, GitHub, arXiv, Hugging Face
 import { parseFeed, SUMMARY_MAX } from "./rss.ts";
-import { cleanText, normalizeUrl, toIsoDate } from "./text.ts";
+import { cleanPostTitle, cleanText, normalizeUrl, toIsoDate } from "./text.ts";
 import type { CollectedItem } from "./types.ts";
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
@@ -143,10 +143,10 @@ export function parseAlgoliaHits(raw: unknown): CollectedItem[] {
   });
 }
 
-/** SNS 게시글 제목: 본문 첫 줄(최대 120자) */
+/** SNS 게시글 제목: URL·멘션을 뺀 본문 첫 문장(최대 120자) */
 function postTitle(text: string): string {
   const first = text.split(/(?<=[.!?。])\s|\n/)[0] || text;
-  return Array.from(first).length > 120 ? `${Array.from(first).slice(0, 119).join("")}…` : first;
+  return cleanPostTitle(first, text);
 }
 
 const lang = (v: unknown): "ko" | "en" | null => (v === "ko" ? "ko" : v === "en" ? "en" : null);
@@ -222,6 +222,84 @@ export function parseBlueskyFeed(raw: unknown): CollectedItem[] {
         popularity: metrics({ likes: post.likeCount, comments: post.replyCount }),
         tags: [],
         language: lang(langs[0]),
+      } satisfies CollectedItem,
+    ];
+  });
+}
+
+/* ---------- Hugging Face Daily Papers (api/daily_papers) ---------- */
+const ARXIV_ID = /^\d{4}\.\d{4,5}(v\d+)?$/;
+
+export function parseHfDailyPapers(raw: unknown): CollectedItem[] {
+  if (!Array.isArray(raw)) throw new Error("Hugging Face Daily Papers 응답 형식이 올바르지 않습니다.");
+  return raw.flatMap((e) => {
+    const entry = e as Record<string, unknown>;
+    const paper = (entry.paper as Record<string, unknown> | undefined) ?? {};
+    const id = typeof paper.id === "string" && ARXIV_ID.test(paper.id) ? paper.id : null;
+    const title = cleanText(paper.title ?? entry.title, 500);
+    if (!id || !title) return [];
+    const authors = Array.isArray(paper.authors)
+      ? paper.authors.map((a) => (a as Record<string, unknown>).name).filter((n): n is string => typeof n === "string")
+      : [];
+    const keywords = Array.isArray(paper.ai_keywords) ? paper.ai_keywords.filter((k): k is string => typeof k === "string").slice(0, 10) : [];
+    return [
+      {
+        title,
+        // 같은 논문의 arXiv 수집분과 구분되도록 HF 논문 페이지(추천·토론 포함)를 원문으로 사용
+        url: `https://huggingface.co/papers/${id}`,
+        summary: cleanText(paper.ai_summary, SUMMARY_MAX) ?? cleanText(paper.summary ?? entry.summary, SUMMARY_MAX),
+        author: authors.length ? cleanText(authors.length > 1 ? `${authors[0]} 외 ${authors.length - 1}명` : authors[0], 100) : null,
+        publishedAt: toIsoDate(paper.publishedAt ?? entry.publishedAt),
+        contentType: "paper",
+        popularity: metrics({ upvotes: paper.upvotes, comments: entry.numComments }),
+        tags: keywords,
+        language: "en",
+      } satisfies CollectedItem,
+    ];
+  });
+}
+
+/* ---------- OpenAlex (works) ---------- */
+/** OpenAlex 초록은 역색인({단어: [위치...]}) 형태로 제공 → 문장으로 복원 */
+export function openAlexAbstract(index: unknown): string | null {
+  if (!index || typeof index !== "object") return null;
+  const words: string[] = [];
+  for (const [word, positions] of Object.entries(index as Record<string, unknown>)) {
+    if (!Array.isArray(positions)) continue;
+    for (const p of positions) if (Number.isInteger(p) && p >= 0 && p < 5000) words[p as number] = word;
+  }
+  const text = words.filter(Boolean).join(" ");
+  return text ? cleanText(text, SUMMARY_MAX) : null;
+}
+
+export function parseOpenAlexWorks(raw: unknown): CollectedItem[] {
+  const results = (raw as { results?: unknown[] } | null)?.results;
+  if (!Array.isArray(results)) throw new Error("OpenAlex 응답 형식이 올바르지 않습니다.");
+  return results.flatMap((w) => {
+    const work = w as Record<string, unknown>;
+    const title = cleanText(work.display_name ?? work.title, 500);
+    const loc = (work.primary_location as Record<string, unknown> | null) ?? {};
+    const url = normalizeUrl(work.doi) ?? normalizeUrl(loc.landing_page_url) ?? normalizeUrl(work.id);
+    if (!title || !url) return [];
+    const authorships = Array.isArray(work.authorships) ? work.authorships : [];
+    const first = cleanText(((authorships[0] as Record<string, unknown> | undefined)?.author as Record<string, unknown> | undefined)?.display_name, 80);
+    const venue = cleanText((loc.source as Record<string, unknown> | null | undefined)?.display_name, 120);
+    const keywords = Array.isArray(work.keywords)
+      ? work.keywords.map((k) => (k as Record<string, unknown>).display_name).filter((k): k is string => typeof k === "string")
+      : [];
+    const topic = cleanText((work.primary_topic as Record<string, unknown> | null | undefined)?.display_name, 120);
+    const abstract = openAlexAbstract(work.abstract_inverted_index);
+    return [
+      {
+        title,
+        url,
+        summary: abstract ?? (venue ? `${venue} 게재 논문` : null),
+        author: first ? (authorships.length > 1 ? `${first} 외 ${authorships.length - 1}명` : first) : null,
+        publishedAt: toIsoDate(work.publication_date),
+        contentType: "paper",
+        popularity: metrics({ citations: work.cited_by_count }),
+        tags: [...(topic ? [topic] : []), ...keywords].slice(0, 10),
+        language: lang(work.language),
       } satisfies CollectedItem,
     ];
   });

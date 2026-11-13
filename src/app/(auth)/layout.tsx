@@ -1,4 +1,5 @@
 import { Sparkles } from "lucide-react";
+import { BRAND } from "@/lib/brand";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -8,8 +9,10 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <Sparkles className="h-5 w-5" aria-hidden="true" />
           </span>
-          <h1 className="text-lg font-semibold">LinkedIn Intelligence Hub</h1>
-          <p className="text-xs text-muted-foreground">개인화 AI 지식·트렌드 인텔리전스</p>
+          <h1 className="text-lg font-semibold">
+            {BRAND.name} <span className="text-sm font-normal text-muted-foreground">{BRAND.nameKo}</span>
+          </h1>
+          <p className="text-xs text-muted-foreground">{BRAND.tagline}</p>
         </div>
         <div className="rounded-lg border bg-card p-6 shadow-sm">{children}</div>
         <p className="mt-4 text-center text-[11px] text-muted-foreground">

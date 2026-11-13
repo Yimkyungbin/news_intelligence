@@ -9,8 +9,10 @@ import {
   parseDevto,
   parseGithubSearch,
   parseHackerNewsItem,
+  parseHfDailyPapers,
   parseHfModels,
   parseMastodonStatuses,
+  parseOpenAlexWorks,
 } from "./sources.ts";
 import type { CollectedItem } from "./types.ts";
 
@@ -69,12 +71,68 @@ async function github(): Promise<AdapterResult> {
   return { items, skipped: 0 };
 }
 
-async function arxiv(): Promise<AdapterResult> {
-  const q = encodeURIComponent("cat:cs.AI OR cat:cs.CL OR cat:cs.LG");
+/** arXiv 이용 약관: 요청 간 3초 이상 간격. 여러 arXiv 소스가 동시에 돌아도 순차 실행 */
+const ARXIV_GAP_MS = 3100;
+let arxivQueue: Promise<void> = Promise.resolve();
+let arxivLast = 0;
+function arxivSlot(): Promise<void> {
+  const next = arxivQueue.then(async () => {
+    const wait = arxivLast + ARXIV_GAP_MS - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    arxivLast = Date.now();
+  });
+  arxivQueue = next.catch(() => undefined);
+  return next;
+}
+
+/**
+ * 분야별 arXiv 소스는 공식 RSS(rss.arxiv.org, 하루 1회 공지분)로 수집한다.
+ * export API 는 요청 한도가 낮아(429) 기존 arxiv 소스 1개만 사용한다.
+ */
+const ARXIV_RSS: Record<string, string[]> = {
+  "arxiv-systems": ["cs.SE", "cs.CR", "cs.DC", "cs.IR"],
+  "arxiv-vision": ["cs.CV", "cs.RO", "cs.MA"],
+};
+const ARXIV_RSS_LIMIT = 100;
+
+async function arxivRss(categories: string[]): Promise<AdapterResult> {
+  await arxivSlot();
+  const { text } = await safeFetch(`https://rss.arxiv.org/rss/${categories.join("+")}`, { accept: "application/rss+xml, application/xml;q=0.9" });
+  const items = parseArxiv(text)
+    .slice(0, ARXIV_RSS_LIMIT)
+    // RSS 설명 앞의 "arXiv:2611.00001v1 Announce Type: new Abstract:" 머리말 제거
+    .map((i) => ({ ...i, summary: i.summary?.replace(/^arXiv:\S+\s+Announce Type:\s*\S+\s+Abstract:\s*/i, "") || null }));
+  return { items, skipped: 0 };
+}
+
+async function arxiv(categories: string[]): Promise<AdapterResult> {
+  const q = encodeURIComponent(categories.map((c) => `cat:${c}`).join(" OR "));
+  await arxivSlot();
   const { text } = await safeFetch(`https://export.arxiv.org/api/query?search_query=${q}&sortBy=submittedDate&sortOrder=descending&max_results=50`, {
     accept: "application/atom+xml",
   });
   return { items: parseArxiv(text), skipped: 0 };
+}
+
+async function hfPapers(): Promise<AdapterResult> {
+  return { items: parseHfDailyPapers(await fetchJson("https://huggingface.co/api/daily_papers?limit=50")), skipped: 0 };
+}
+
+/** OpenAlex 하위 분야: 1702 Artificial Intelligence, 1707 Computer Vision and Pattern Recognition */
+const OPENALEX_SUBFIELDS = ["1702", "1707"];
+
+async function openAlex(): Promise<AdapterResult> {
+  const since = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const params = new URLSearchParams({
+    filter: `primary_topic.subfield.id:${OPENALEX_SUBFIELDS.join("|")},from_publication_date:${since}`,
+    sort: "cited_by_count:desc",
+    per_page: "40",
+    select: "id,doi,display_name,publication_date,cited_by_count,primary_location,authorships,language,primary_topic,keywords,abstract_inverted_index",
+  });
+  // 키가 없으면 IP 단위 공용 무료 한도(하루 $0.10, 이 호출은 $0.0001)로 동작
+  const key = process.env.OPENALEX_API_KEY;
+  if (key) params.set("api_key", key);
+  return { items: parseOpenAlexWorks(await fetchJson(`https://api.openalex.org/works?${params.toString()}`)), skipped: 0 };
 }
 
 async function huggingFace(): Promise<AdapterResult> {
@@ -154,7 +212,14 @@ export function adapterFor(source: SourceRow, ctx: AdapterContext = { queries: [
     case "github":
       return github;
     case "arxiv":
-      return arxiv;
+      return () => arxiv(["cs.AI", "cs.CL", "cs.LG"]);
+    case "arxiv-systems":
+    case "arxiv-vision":
+      return () => arxivRss(ARXIV_RSS[source.slug]);
+    case "hf-papers":
+      return hfPapers;
+    case "openalex-ai":
+      return openAlex;
     case "hugging-face":
       return huggingFace;
   }

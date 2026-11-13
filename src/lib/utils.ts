@@ -26,6 +26,22 @@ export function formatDateTime(value: string | Date | null | undefined, timeZone
   }).format(d);
 }
 
+/** 상대 시간 (예: 3시간 전). 7일이 지나면 날짜로 표시 */
+export function formatRelative(value: string | Date | null | undefined, now = Date.now()) {
+  if (!value) return "-";
+  const d = typeof value === "string" ? new Date(value) : value;
+  const diff = now - d.getTime();
+  if (Number.isNaN(diff)) return "-";
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "방금 전";
+  if (min < 60) return `${min}분 전`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}시간 전`;
+  const days = Math.floor(h / 24);
+  if (days < 7) return `${days}일 전`;
+  return formatDate(d);
+}
+
 /** KST 기준 오늘 00:00의 UTC ISO 문자열 */
 export function startOfTodayKstIso() {
   const now = new Date();

@@ -1,0 +1,33 @@
+# 구현 작업: 트렌드 메인 개편 · 카테고리 · 반응 지표 · 논문
+
+- [x] 1. 통계를 Statistics로 이동 (요구사항 1)
+  - [x] 1.1 E2E: Statistics에서 요약 지표 설명·키워드 순위 → Trending 이동
+- [x] 2. 카테고리 8종 규칙 분류·저장 (요구사항 3.1~3.2)
+  - [x] 2.1 단위 테스트(분류 사례, 단어 경계, 저장값 우선) · DB CHECK 테스트
+- [x] 3. 반응 지표 일별 기록·증가량·순위 변동 (요구사항 4)
+  - [x] 3.1 단위 테스트(대표 지표, 증가량, 상위 %, KST 날짜, 순위 변동) · DB 격리·쓰기 차단 테스트
+- [x] 4. 메인 트렌드 보드·카드 (요구사항 2)
+  - [x] 4.1 SNS 제목·요약 정리 단위 테스트, E2E(트렌드 한눈에·Top 10·URL 미노출·Weekly 전환)
+- [x] 5. Trending 카테고리 탭 (요구사항 3.3)
+  - [x] 5.1 E2E: 메인 칩 필터, 카테고리 개요 8개, 모아보기 필터 결과
+- [x] 6. 논문 출처 확대 (요구사항 5.2~5.3)
+  - [x] 6.1 파서 단위 테스트, 실제 수집 1회(로컬): arXiv 29, arXiv 시스템 25, HF Papers 17, OpenAlex 13, arXiv 비전 9건 저장
+  - [x] 6.2 `docs/api-feasibility-matrix.md` 갱신(OpenReview 403, Semantic Scholar 보류)
+- [x] 7. 화면 피드백 반영
+  - [x] 7.1 AI Daily Briefing 최상단(24시간 건수 + AI 인사이트만), 트렌드 한눈에 확대 표, 급상승 키워드 행 목록(오른쪽)
+  - [x] 7.2 논문 별도 메뉴 `/papers` (기간·정렬·출처 필터, 출처별 건수, 키워드), 메인에서 논문 제외
+  - [x] 7.3 Settings 소스별 사이트·피드·API 링크, 메뉴 순서(Statistics 는 Settings 위)
+  - [x] 7.4 서비스 이름 Insight Radar(인사이트 레이더), `src/lib/brand.ts` 한 곳에서 관리
+  - [x] 7.5 E2E: Papers 메뉴, 메뉴 순서, 브리핑 위치, 카테고리 표, Settings 링크
+- [x] 8. Dashboard·Trending 중복 정리
+  - [x] 8.1 Trending 조건 없음: 요약 반복 대신 조건 선택 안내 + 오늘의 브리핑 AI 인사이트 재사용 (AI 호출 없음)
+  - [x] 8.2 조건 선택 시: 조건 내 변화·함께 등장한 키워드·카테고리·출처 분포·주제 증감 + AI 시사점, 조건 없는 생성 요청은 서버에서 차단
+  - [x] 8.3 단위 테스트(조건 여부, 함께 등장한 키워드, 출처 분포), E2E(조건 없음·키워드 조건)
+- [ ] 9. 검증·반영
+  - [x] 9.1 `npm run verify:full` 통과 (secrets, unit 108, DB 21, E2E 25/25)
+  - [ ] 9.2 PR → CI `verify-full` 통과 → 병합
+- [ ] 10. Google(OIDC) 로그인 — 운영자 Gmail, OAuth 클라이언트 정보 대기
+- [x] 11. My Following · Influencers 통합
+  - 같은 테이블·카드·Server Action 을 쓰고 `is_following` 필터만 달라 Influencers 메뉴 하나로 통합 (탭: 전체 / 팔로우 중 / 팔로우 후보)
+  - `/following` 은 `/influencers?tab=following` 으로 이동, 대시보드 Recommended Influencers 카드는 Following Update 의 '팔로우 후보 N명' 링크로 대체
+  - [x] 11.1 E2E: /following 이동, 팔로우 중 탭 추가, 팔로우 해제·재팔로우 시 탭 이동

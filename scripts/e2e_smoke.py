@@ -11,6 +11,7 @@ import json
 import re
 import sys
 import time
+import urllib.parse
 import urllib.request
 import uuid
 
@@ -109,7 +110,7 @@ def run():
                 page.fill("#email", EMAIL)
                 page.fill("#password", PASSWORD)
                 page.click("button[type=submit]")
-            expect(page.get_by_role("heading", name=re.compile("안녕하세요"))).to_be_visible()
+            expect(page.get_by_role("heading", name="오늘의 트렌드")).to_be_visible()
 
         check("메일 인증 링크 → 로그인 → 대시보드", confirm)
 
@@ -134,14 +135,52 @@ def run():
         check("테스트 고정 데이터 준비 (예시 데이터 없음 확인)", seed_fixtures)
 
         def dashboard():
+            # 메인: 트렌드 한눈에(카테고리 비중·급상승) + Daily/Weekly Top 10 + 논문 섹션. 수치 통계는 Statistics 로 이동
+            # 고정 데이터는 로그인 후 SQL 로 넣었으므로 화면을 다시 불러옴
+            page.goto(f"{BASE}/")
+            expect(page.get_by_role("heading", name="오늘의 트렌드")).to_be_visible()
             expect(page.get_by_text("Daily Top 10")).to_be_visible()
-            expect(page.get_by_text("Weekly Top 10")).to_be_visible()
+            expect(page.get_by_text("트렌드 한눈에")).to_be_visible()
+            expect(page.get_by_role("img", name=re.compile("^카테고리 비중"))).to_be_visible()
+            expect(page.get_by_text("Today's Intelligence")).to_have_count(0)
             expect(page.get_by_text("My Topics Update")).to_be_visible()
             expect(page.get_by_text("DEMO DATA")).to_have_count(0)
             expect(page.locator("text=Agentic AI").first).to_be_visible()
+            # 배치: AI Daily Briefing 이 최상단, 급상승 키워드는 행 목록
+            briefing_y = page.get_by_text("AI Daily Briefing").first.bounding_box()["y"]
+            trend_y = page.get_by_text("트렌드 한눈에").first.bounding_box()["y"]
+            assert briefing_y < trend_y, "AI Daily Briefing 이 트렌드 한눈에 위에 있어야 함"
+            expect(page.get_by_role("table", name="카테고리별 건수")).to_be_visible()
+            # 고정 데이터 3건으로는 급상승 키워드(2건 이상)가 없을 수 있어 카드 제목만 확인
+            expect(page.get_by_text("급상승 키워드", exact=True).first).to_be_visible()
+            # 논문은 메인에서 빠지고 Papers 메뉴에서 표시 (30시간 전 fixture → 최근 7일)
+            expect(page.get_by_role("button", name="RAG evaluation methods survey")).to_have_count(0)
+            # 반응 지표: 출처 제공 지표 + 출처 내 순위, URL 은 카드에 노출하지 않음
+            hn = page.locator("article", has=page.get_by_role("button", name="Enterprise agentic AI adoption checklist"))
+            expect(hn.get_by_label("반응 지표")).to_contain_text("120")
+            expect(hn.get_by_text("news.ycombinator.com")).to_have_count(0)
             page.screenshot(path=f"{SHOTS}/dashboard.png", full_page=True)
+            # Weekly 전환
+            page.get_by_role("group", name="기간").get_by_role("link", name="Weekly").click()
+            expect(page).to_have_url(re.compile(r"period=weekly"))
+            expect(page.get_by_text("Weekly Top 10")).to_be_visible()
 
-        check("대시보드 위젯 + 예시 데이터 없음 + 시드 주제", dashboard)
+        check("대시보드 브리핑 최상단·트렌드 한눈에·급상승 키워드·Top 10 + 예시 데이터 없음", dashboard)
+
+        def papers():
+            page.goto(f"{BASE}/papers")
+            expect(page.get_by_role("heading", name="Papers", exact=True)).to_be_visible()
+            art = page.locator("article", has=page.get_by_role("button", name="RAG evaluation methods survey"))
+            expect(art).to_have_count(1)
+            expect(art.get_by_text("논문", exact=True)).to_be_visible()
+            expect(page.get_by_role("list", name="출처별 논문 수")).to_contain_text("arXiv AI·NLP·ML")
+            # 출처 필터: HF Daily Papers 에는 fixture 논문 없음
+            page.get_by_role("group", name="논문 출처").get_by_role("link", name=re.compile(r"^HF Daily Papers")).click()
+            expect(page).to_have_url(re.compile(r"source=hf-papers"))
+            expect(page.get_by_role("button", name="RAG evaluation methods survey")).to_have_count(0)
+            page.screenshot(path=f"{SHOTS}/papers.png", full_page=True)
+
+        check("Papers 메뉴: 논문 목록·출처별 건수·출처 필터", papers)
 
         def dashboard_insights():
             demo_title = "Enterprise agentic AI adoption checklist"
@@ -153,10 +192,6 @@ def run():
             expect(note).to_contain_text("출처 안에서의 순위")
             page.keyboard.press("Escape")
             expect(note).to_have_count(0)
-            page.get_by_role("button", name="오늘 신규 콘텐츠 설명").click()
-            expect(page.get_by_role("note")).to_contain_text("KST 00:00")
-            page.keyboard.press("Escape")
-
             # 2) 상세 보기: 제목 클릭 → 패널(요약·데이터 권한·원문 링크·연결 주제), Esc 로 닫힘
             page.get_by_role("button", name=demo_title).first.click()
             dialog = page.get_by_role("dialog", name=demo_title)
@@ -179,29 +214,61 @@ def run():
             page.get_by_role("button", name="상세 보기 닫기").click()
             expect(page.get_by_role("dialog", name=demo_title)).to_be_hidden()
 
-            # 4) 키워드 순위 → Trending 키워드 필터
+            # 4) Statistics 로 옮긴 요약 지표·키워드 순위 → Trending 키워드 필터
+            page.goto(f"{BASE}/statistics")
+            page.get_by_role("button", name="오늘 신규 콘텐츠 설명").click()
+            expect(page.get_by_role("note")).to_contain_text("KST 00:00")
+            page.keyboard.press("Escape")
             page.get_by_role("list", name="최근 7일 키워드 순위").get_by_role("link").first.click()
             expect(page).to_have_url(re.compile(r"/trending\?.*kw="))
             expect(page.get_by_role("link", name=re.compile("키워드 필터 .* 해제"))).to_be_visible()
             assert page.locator("article").count() >= 1, "키워드 필터 결과가 비어 있음"
 
-        check("대시보드 항목 설명·상세 보기·주제 펼치기·키워드 이동", dashboard_insights)
+        check("대시보드 항목 설명·상세 보기·주제 펼치기 + Statistics 요약·키워드 이동", dashboard_insights)
+
+        def categories():
+            demo_title = "Enterprise agentic AI adoption checklist"
+            # 메인 카테고리 칩 → Top 10 필터 (fixture 는 '활용 사례': enterprise·adoption)
+            page.goto(f"{BASE}/?period=weekly")
+            page.get_by_role("group", name="카테고리 필터").get_by_role("link", name=re.compile(r"^활용 사례")).click()
+            expect(page).to_have_url(re.compile(r"cat=usecase"))
+            expect(page.get_by_text(re.compile("카테고리: 활용 사례")).first).to_be_visible()
+            expect(page.get_by_role("button", name=demo_title)).to_be_visible()
+            expect(page.get_by_role("button", name="Open-weight model release roundup")).to_have_count(0)
+            # Trending 카테고리 탭: 개요(8개 카테고리) → 모아보기 → 필터된 목록
+            page.goto(f"{BASE}/trending?view=category&period=weekly")
+            expect(page.get_by_role("tab", name="카테고리")).to_have_attribute("aria-selected", "true")
+            expect(page.get_by_role("region", name=re.compile(r"카테고리$"))).to_have_count(8)
+            case = page.get_by_role("region", name="활용 사례 카테고리")
+            expect(case.get_by_role("button", name=demo_title)).to_be_visible()
+            page.screenshot(path=f"{SHOTS}/trending-categories.png", full_page=True)
+            case.get_by_role("link", name="활용 사례 모아보기 →").click()
+            expect(page).to_have_url(re.compile(r"view=category.*cat=usecase|cat=usecase.*view=category"))
+            expect(page.get_by_role("link", name="카테고리 필터 활용 사례 해제")).to_be_visible()
+            expect(page.locator("article", has=page.get_by_role("button", name=demo_title))).to_have_count(1)
+            assert page.locator("article").count() == 1, "카테고리 필터에 다른 카테고리 콘텐츠가 섞임"
+
+        check("카테고리 태깅·메인 필터·Trending 카테고리 탭 모아보기", categories)
 
         def nav_all():
-            for href, title in [
+            menu = [
                 ("/trending", "Trending Posts"),
-                ("/statistics", "Statistics"),
+                ("/papers", "Papers"),
                 ("/influencers", "Influencers"),
-                ("/following", "My Following"),
                 ("/topics", "My Topics"),
                 ("/knowledge", "Knowledge Base"),
                 ("/saved", "Saved Posts"),
+                ("/statistics", "Statistics"),
                 ("/settings", "Settings"),
-            ]:
+            ]
+            for href, title in menu:
                 page.goto(f"{BASE}{href}")
                 expect(page.get_by_role("heading", name=title, exact=True)).to_be_visible()
+            # 사이드바 순서: Statistics 는 Settings 바로 위
+            labels = [t.strip() for t in page.locator("aside nav a").all_inner_texts()]
+            assert labels.index("Statistics") == labels.index("Settings") - 1, f"메뉴 순서: {labels}"
 
-        check("사이드바 8개 메뉴 렌더링", nav_all)
+        check("사이드바 메뉴 렌더링·순서 (Papers 추가, Statistics 는 Settings 위)", nav_all)
 
         def topic_crud():
             page.goto(f"{BASE}/topics")
@@ -252,8 +319,11 @@ def run():
         check("한국어 입력 NFC 정규화 저장", korean_nfc)
 
         def following_crud():
+            # 기존 /following 은 Influencers '팔로우 중' 탭으로 이동
             page.goto(f"{BASE}/following")
-            page.get_by_role("button", name="인물 추가").click()
+            expect(page).to_have_url(re.compile(r"/influencers\?tab=following"))
+            expect(page.get_by_role("tab", name=re.compile(r"^팔로우 중"))).to_have_attribute("aria-selected", "true")
+            page.get_by_role("button", name="팔로우할 인물 추가").click()
             page.fill("#pname-new", "Jane Doe")
             page.fill("#ptitle-new", "Chief AI Officer")
             page.fill("#pcompany-new", "Example Corp")
@@ -282,14 +352,23 @@ def run():
             expect(page.get_by_text("비활성", exact=True)).to_be_visible()
             page.get_by_role("button", name="활성화", exact=True).first.click()
             expect(page.get_by_text("비활성", exact=True)).to_have_count(0)
+            # 팔로우 해제 → '팔로우 후보' 탭으로 이동, 다시 팔로우 → '팔로우 중' 탭
+            page.get_by_role("button", name="팔로우 해제").first.click()
+            expect(page.get_by_role("heading", name="Jane Doe")).to_have_count(0)
+            page.get_by_role("tab", name=re.compile(r"^팔로우 후보")).click()
+            expect(page.get_by_role("heading", name="Jane Doe")).to_be_visible()
+            page.get_by_role("button", name="팔로우", exact=True).first.click()
+            expect(page.get_by_role("heading", name="Jane Doe")).to_have_count(0)
+            page.get_by_role("tab", name=re.compile(r"^전체")).click()
+            expect(page.get_by_role("heading", name="Jane Doe")).to_be_visible()
 
-        check("My Following 추가/URL 검증/링크·로고/활성 토글", following_crud)
+        check("Influencers 통합: 팔로우 중 탭 추가/URL 검증/링크·로고/활성·팔로우 토글/탭 이동", following_crud)
 
         def dashboard_following():
             page.goto(f"{BASE}/")
             expect(page.get_by_role("link", name="LinkedIn 게시글")).to_be_visible()
 
-        check("대시보드 My Following Update 반영", dashboard_following)
+        check("대시보드 Following Update 반영", dashboard_following)
 
         def saved_flow():
             page.goto(f"{BASE}/trending?period=monthly&limit=20")
@@ -427,7 +506,7 @@ def run():
             page.goto(f"{BASE}/")
             page.get_by_role("button", name="지금 생성").click()
             expect(page.get_by_text("브리핑을 생성했습니다.")).to_be_visible(timeout=60000)
-            expect(page.get_by_text("트렌드 TOP 5")).to_be_visible()
+            # 대시보드 브리핑은 AI 인사이트만 (트렌드 TOP 5 는 브리핑 전체 화면에서 확인)
             expect(page.get_by_text(re.compile(r"\[DEMO\] AI 처리 허용 콘텐츠 1건 기반"))).to_be_visible()
             page.goto(f"{BASE}/briefing")
             for section in ["오늘의 주요 기술 트렌드 TOP 5", "주요 신규 콘텐츠 TOP 10", "관심 주제별 업데이트", "주요 인플루언서 콘텐츠", "AI가 선정한 핵심 인사이트", "전일 대비 주요 변화"]:
@@ -557,7 +636,25 @@ def run():
                 expect(card.get_by_text("시사점", exact=True)).to_be_visible()
                 expect(card.get_by_role("link", name="Agentic AI", exact=True)).to_be_visible()
 
+                # 주제 상세·Saved Posts·Knowledge Base 도 같은 번역 표시 (저장은 SQL 로 준비 후 정리)
+                sql(
+                    "insert into public.saved_posts (user_id, content_id, in_knowledge_base) "
+                    f"select user_id, id, true from public.content_items where original_url = '{url}'"
+                )
+                topic_id = sql(f"select t.id from public.topics t join public.profiles p on p.id = t.user_id where p.email = '{EMAIL}' and t.name = 'Agentic AI'")
+                try:
+                    for path in [f"/topics/{topic_id}", "/saved", "/knowledge"]:
+                        page.goto(f"{BASE}{path}")
+                        expect(page.get_by_role("switch", name="한국어로 보기")).to_be_visible()
+                        expect(page.get_by_role("button", name=f"[DEMO 번역] {title}").first).to_be_visible()
+                    # 번역 제목으로 검색
+                    page.goto(f"{BASE}/saved?q=" + urllib.parse.quote("DEMO 번역"))
+                    expect(page.get_by_role("button", name=f"[DEMO 번역] {title}").first).to_be_visible()
+                finally:
+                    sql(f"delete from public.saved_posts where content_id in (select id from public.content_items where original_url = '{url}')")
+
                 # 번역 끄기 → 원문 제목
+                page.goto(f"{BASE}/trending?period=weekly&limit=50")
                 page.get_by_role("switch", name="한국어로 보기").click()
                 page.wait_for_timeout(800)
                 page.reload()
@@ -567,9 +664,16 @@ def run():
                 page.wait_for_timeout(800)
                 assert sql(f"select translate_ko::text from public.profiles where email = '{EMAIL}'") == "true"
 
-                # 트렌드 시사점 패널: 집계 + AI(허용 콘텐츠만)
+                # 조건 없음: 전체 흐름은 Dashboard → 요약 반복·AI 시사점 생성 없음, 키워드로 분석 시작 안내
                 page.reload()
+                expect(page.get_by_text("조건별 트렌드 분석")).to_be_visible()
+                expect(page.get_by_role("button", name="AI 시사점 생성")).to_have_count(0)
+                expect(page.get_by_label("오늘의 AI 인사이트 (Daily Briefing)")).to_be_visible()
+                # 조건(키워드) 선택 시: 조건 내 변화·함께 등장한 키워드·출처 분포 + AI 시사점(허용 콘텐츠만)
+                page.goto(f"{BASE}/trending?period=weekly&limit=50&kw=agentic%20ai")
+                expect(page.get_by_text(re.compile(r"트렌드 시사점 · 키워드: #agentic ai"))).to_be_visible()
                 expect(page.get_by_text("급상승 키워드")).to_be_visible()
+                expect(page.get_by_role("list", name="조건 내 출처 분포")).to_be_visible()
                 page.get_by_role("button", name="AI 시사점 생성").click()
                 expect(page.get_by_text(re.compile(r"트렌드 시사점을 생성했습니다 \(콘텐츠 1건 분석\)"))).to_be_visible(timeout=60000)
                 expect(page.get_by_text(re.compile(r"^\[DEMO\] 인기 콘텐츠 1건 기반"))).to_be_visible()
@@ -608,6 +712,11 @@ def run():
             for name in ["LinkedIn", "Hacker News", "GitHub", "arXiv", "Hugging Face", "Reddit", "X", "OpenAI", "AWS", "NVIDIA"]:
                 expect(page.get_by_role("img", name=f"{name} 로고").first).to_be_visible()
             expect(page.get_by_text("UNAVAILABLE").first).to_be_visible()
+            # 소스별 사이트·수집 주소 링크 (새 탭)
+            site = page.get_by_role("link", name="Hacker News 사이트 열기 (새 탭)")
+            expect(site).to_have_attribute("href", re.compile(r"^https://news\.ycombinator\.com"))
+            expect(site).to_have_attribute("target", "_blank")
+            expect(page.get_by_role("link", name="Hugging Face Daily Papers 수집 주소 열기 (새 탭)")).to_have_attribute("href", "https://huggingface.co/api/daily_papers")
             page.fill("#s-name", "E2E Renamed")
             page.get_by_role("button", name="저장", exact=True).click()
             expect(page.get_by_text("설정을 저장했습니다.")).to_be_visible()
