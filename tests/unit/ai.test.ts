@@ -3,7 +3,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { checkAIPermission, filterAIAllowed } from "../../src/lib/ai/gate.ts";
 import { buildBriefingInsightPrompt, buildContentInsightPrompt, buildTopicInsightPrompt, PROMPT_LIMITS } from "../../src/lib/ai/prompts.ts";
-import { AIError, callOpenAI, extractOutputText, parseTaskOutput } from "../../src/lib/ai/openai.ts";
+import { AIError, callOpenAI, cleanApiKey, describeFetchError, extractOutputText, parseTaskOutput } from "../../src/lib/ai/openai.ts";
 import { JSON_SCHEMAS, TASK_SCHEMAS } from "../../src/lib/ai/schemas.ts";
 import { mockBriefingInsight, mockContentInsight, mockTopicInsight } from "../../src/lib/ai/mock.ts";
 import { briefingAICandidates, composeBriefing, kstDate, type BriefingItem } from "../../src/lib/briefing/compose.ts";
@@ -224,5 +224,45 @@ describe("Daily Briefing 구성", () => {
     const candidates = briefingAICandidates(items, now);
     assert.equal(candidates.length, 3);
     assert.equal(filterAIAllowed(candidates, true).length, 1);
+  });
+});
+
+describe("OpenAI 키 정리·오류 설명 (운영 환경변수 입력 실수 대비)", () => {
+  test("앞뒤 공백·줄바꿈, 따옴표, Bearer 접두사 제거", () => {
+    assert.equal(cleanApiKey("  sk-abc123\n"), "sk-abc123");
+    assert.equal(cleanApiKey('"sk-abc123"'), "sk-abc123");
+    assert.equal(cleanApiKey("Bearer sk-abc123"), "sk-abc123");
+  });
+
+  test("헤더에 넣을 수 없는 값은 null: 빈 값, 중간 공백, 한글", () => {
+    assert.equal(cleanApiKey(""), null);
+    assert.equal(cleanApiKey(undefined), null);
+    assert.equal(cleanApiKey("sk-abc 123"), null);
+    assert.equal(cleanApiKey("sk-키"), null);
+  });
+
+  test("잘못된 키는 요청 전에 재시도 불가 오류로 차단", async () => {
+    let called = false;
+    const f = (async () => {
+      called = true;
+      return new Response("{}");
+    }) as typeof fetch;
+    await assert.rejects(
+      callOpenAI({ apiKey: "sk-키", model: "m", task: "briefing_insight", prompt: { system: "s", user: "u" }, fetchImpl: f }),
+      (e: unknown) => e instanceof AIError && !e.retryable && /OPENAI_API_KEY/.test(e.message),
+    );
+    assert.equal(called, false);
+  });
+
+  test("연결 실패 원인(code)을 남기되 키는 가림", async () => {
+    const err = Object.assign(new TypeError("fetch failed sk-secretvalue"), { cause: { code: "ENOTFOUND" } });
+    assert.equal(describeFetchError(err), "TypeError: fetch failed sk-*** / ENOTFOUND");
+    const f = (async () => {
+      throw err;
+    }) as typeof fetch;
+    await assert.rejects(
+      callOpenAI({ apiKey: "sk-ok", model: "m", task: "briefing_insight", prompt: { system: "s", user: "u" }, fetchImpl: f }),
+      (e: unknown) => e instanceof AIError && /ENOTFOUND/.test(e.message) && !e.message.includes("secretvalue"),
+    );
   });
 });

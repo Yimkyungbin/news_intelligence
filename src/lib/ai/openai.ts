@@ -60,6 +60,29 @@ export function parseTaskOutput<T extends AITaskName>(task: T, text: string) {
   return parsed.data as ReturnType<(typeof TASK_SCHEMAS)[T]["parse"]>;
 }
 
+/**
+ * 환경변수로 받은 API 키 정리: 앞뒤 공백·줄바꿈, 감싼 따옴표, "Bearer " 접두사 제거.
+ * 헤더에 넣을 수 없는 문자(공백·제어문자·비 ASCII)가 남으면 null (fetch 가 헤더 생성 단계에서 실패하는 것을 미리 차단)
+ */
+export function cleanApiKey(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  const k = raw
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+  return k && /^[\x21-\x7E]+$/.test(k) ? k : null;
+}
+
+/** fetch 오류를 비밀값 없이 짧게 설명 (예: "TypeError: fetch failed / ENOTFOUND") */
+export function describeFetchError(e: unknown): string {
+  if (!(e instanceof Error)) return "알 수 없는 오류";
+  const cause = (e as Error & { cause?: { code?: string; name?: string; message?: string } }).cause;
+  const parts = [`${e.name}: ${e.message}`];
+  if (cause?.code || cause?.name) parts.push(cause.code ?? cause.name ?? "");
+  return parts.join(" / ").replace(/sk-[A-Za-z0-9_-]+/g, "sk-***").slice(0, 160);
+}
+
 export async function callOpenAI<T extends AITaskName>(opts: {
   apiKey: string;
   model: string;
@@ -69,9 +92,11 @@ export async function callOpenAI<T extends AITaskName>(opts: {
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
 }) {
+  const apiKey = cleanApiKey(opts.apiKey);
+  if (!apiKey) throw new AIError("OPENAI_API_KEY 값이 비어 있거나 공백·따옴표·한글 등 사용할 수 없는 문자가 섞여 있습니다.", false);
   const res = await (opts.fetchImpl ?? fetch)(OPENAI_ENDPOINT, {
     method: "POST",
-    headers: { Authorization: `Bearer ${opts.apiKey}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     signal: AbortSignal.timeout(opts.timeoutMs ?? 60_000),
     body: JSON.stringify({
       model: opts.model,
@@ -86,7 +111,11 @@ export async function callOpenAI<T extends AITaskName>(opts: {
     }),
   }).catch((e: unknown) => {
     const timeout = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
-    throw new AIError(timeout ? "AI 응답 시간이 초과되었습니다." : "AI 서버에 연결하지 못했습니다.", true);
+    if (timeout) throw new AIError("AI 응답 시간이 초과되었습니다.", true);
+    // 원인 파악용: 오류 종류·코드만 남김 (키·요청 본문은 포함하지 않음)
+    const detail = describeFetchError(e);
+    console.error("[openai] fetch 실패:", detail);
+    throw new AIError(`AI 서버에 연결하지 못했습니다. (${detail})`, true);
   });
 
   if (!res.ok) {
