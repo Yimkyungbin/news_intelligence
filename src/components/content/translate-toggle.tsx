@@ -9,8 +9,9 @@ import { InfoTip } from "@/components/info-tip";
 import { cn } from "@/lib/utils";
 
 /** 백그라운드 번역 대기 시 자동 새로고침 간격·최대 횟수 (번역할 수 없는 콘텐츠가 남아도 무한 반복하지 않음) */
-const REFRESH_MS = 20_000;
-const MAX_REFRESH = 4;
+// 1단계(제목) 번역이 수 초 안에 끝나므로 짧게, 최대 1분
+const REFRESH_MS = 5_000;
+const MAX_REFRESH = 12;
 
 /**
  * "한국어로 보기" 토글 (Dashboard·Trending·Papers·주제 상세·Saved Posts·Knowledge Base 공통, 사용자 설정 하나)

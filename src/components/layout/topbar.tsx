@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Form from "next/form";
 import { useTheme } from "next-themes";
 import Link from "next/link";
@@ -107,12 +107,13 @@ function UserMenu({ name, email }: { name: string; email: string }) {
 
 export function Topbar({ name, email }: { name: string; email: string }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur">
       <Button variant="ghost" size="icon" className="lg:hidden" aria-label="메뉴 열기" onClick={() => setMenuOpen(true)}>
         <Menu aria-hidden="true" />
       </Button>
-      <MobileSidebar open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <MobileSidebar open={menuOpen} onClose={closeMenu} />
 
       <Form action="/search" className="relative w-full max-w-md" role="search">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />

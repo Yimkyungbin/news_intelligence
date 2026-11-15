@@ -60,6 +60,12 @@ export const batchMetaSchema = z.object({
 });
 export type BatchMeta = z.infer<typeof batchMetaSchema>;
 
+/* ---------- 1단계: 제목만 빠르게 번역 (응답이 짧아 수 초 내 완료) ---------- */
+export const titleBatchSchema = z.object({
+  items: z.array(z.object({ n: z.number().int().min(1).max(20), title_ko: z.string().trim().max(400) })).max(20),
+});
+export type TitleBatch = z.infer<typeof titleBatchSchema>;
+
 /* ---------- OpenAI 용 JSON Schema (strict: 모든 필드 required, additionalProperties false) ---------- */
 const str = { type: "string" } as const;
 const strArr = { type: "array", items: str } as const;
@@ -96,6 +102,9 @@ export const JSON_SCHEMAS = {
   batch_meta: obj({
     items: { type: "array", items: obj({ n: { type: "integer" }, title_ko: str, summary_ko: str, implication_ko: str }) },
   }),
+  title_batch: obj({
+    items: { type: "array", items: obj({ n: { type: "integer" }, title_ko: str }) },
+  }),
 } as const;
 
 export type AITaskName = keyof typeof JSON_SCHEMAS;
@@ -104,4 +113,5 @@ export const TASK_SCHEMAS = {
   topic_insight: topicInsightSchema,
   briefing_insight: briefingInsightSchema,
   batch_meta: batchMetaSchema,
+  title_batch: titleBatchSchema,
 } as const;

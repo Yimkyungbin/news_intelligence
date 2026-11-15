@@ -1,6 +1,6 @@
 // 모의 AI (순수 모듈): 키가 없는 로컬·테스트·CI 용. 결과는 DEMO 로 표시된다.
 // 입력 텍스트만으로 결정적으로 생성하며 외부로 아무것도 보내지 않는다.
-import type { BatchMeta, BriefingInsight, ContentInsight, TopicInsight } from "./schemas.ts";
+import type { BatchMeta, BriefingInsight, ContentInsight, TitleBatch, TopicInsight } from "./schemas.ts";
 import type { PromptContent } from "./prompts.ts";
 
 export const MOCK_MODEL = "mock-demo";
@@ -57,6 +57,11 @@ export function mockBatchMeta(items: (PromptContent & { language: string })[]): 
       implication_ko: "[DEMO] 모의 AI 한 줄 시사점 예시입니다.",
     })),
   };
+}
+
+/** 1단계 제목 번역 모의 결과 (2단계 mockBatchMeta 와 같은 제목) */
+export function mockTitleBatch(items: { title: string }[]): TitleBatch {
+  return { items: items.map((c, i) => ({ n: i + 1, title_ko: `[DEMO 번역] ${short(c.title, 80)}` })) };
 }
 
 export function mockTrendInsight(items: PromptContent[]): BriefingInsight {

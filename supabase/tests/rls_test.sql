@@ -149,6 +149,21 @@ begin
   end;
   raise notice 'PASS bulk AI permission function: not callable by clients';
 
+  -- 11-2) 번역 처리 중 표시(claim) 함수·테이블은 클라이언트가 쓸 수 없음
+  begin
+    perform public.claim_ai_urls(array['https://x.example/a'], 'title');
+    raise exception 'SHOULD_NOT_REACH';
+  exception when others then
+    assert sqlerrm <> 'SHOULD_NOT_REACH', 'client must not call claim_ai_urls';
+  end;
+  begin
+    insert into public.ai_job_claims (original_url, stage) values ('https://x.example/a', 'title');
+    raise exception 'SHOULD_NOT_REACH';
+  exception when others then
+    assert sqlerrm <> 'SHOULD_NOT_REACH', 'client must not write ai_job_claims';
+  end;
+  raise notice 'PASS ai job claims: server only';
+
   -- ===== Phase 3 =====
   -- 13) 클라이언트는 AI 결과(주제 인사이트)·브리핑을 직접 만들 수 없음
   begin
