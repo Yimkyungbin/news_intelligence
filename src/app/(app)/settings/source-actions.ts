@@ -78,6 +78,22 @@ export async function setSourceAIAllowed(sourceId: string, allowed: boolean): Pr
   };
 }
 
+/**
+ * 운영자 전용: 허용된 출처 중 번역·시사점이 없는 콘텐츠를 지금 생성 (실패분 재시도 포함)
+ * 허용 스위치를 다시 누르지 않아도 되도록 분리. 생성은 응답 후 백그라운드에서 (시스템 하루 한도 적용)
+ */
+export async function runSystemTranslation(): Promise<ActionState> {
+  if (!(await adminOnly())) return { ok: false, message: "운영자만 실행할 수 있습니다." };
+  const ids = await aiEligibleSourceIds();
+  if (ids.length === 0) return { ok: false, message: "AI 번역·요약이 허용된 출처가 없습니다." };
+  after(async () => {
+    // 운영자가 직접 누른 경우라 허용 스위치와 같이 모의 AI 도 허용 (운영에서는 모의 AI 사용 불가)
+    const res = await processSystemAI({ maxItems: 100 });
+    console.info("[system-ai] 수동 번역 실행:", res.message);
+  });
+  return { ok: true, message: "번역·시사점 생성을 시작했습니다. 1~3분 뒤 새로고침하면 반영됩니다." };
+}
+
 /** 운영자 전용: 모든 시스템 소스 AI 번역·요약 일괄 허용/차단 */
 export async function setAllSourcesAIAllowed(allowed: boolean): Promise<ActionState> {
   if (typeof allowed !== "boolean") return { ok: false, message: "잘못된 요청입니다." };

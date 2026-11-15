@@ -4,6 +4,8 @@ import { AddFeedForm, CollectNowButton } from "./collect-forms";
 import { deleteUserFeed, setUserFeedActive } from "./collect-actions";
 import { SourceToggle } from "./source-toggle";
 import { BulkToggle } from "./bulk-toggle";
+import { TranslateRunButton } from "./translate-run-button";
+import { getAIMeta } from "@/lib/queries";
 import { getDisabledSourceIds } from "@/lib/source-settings";
 import { isAdminEmail } from "@/lib/admin";
 import { requireUser } from "@/lib/auth";
@@ -86,6 +88,21 @@ export default async function SettingsPage() {
   ]);
   const disabled = new Set(await getDisabledSourceIds(user.id));
   const admin = isAdminEmail(user.email);
+  // 운영자: 내 외국어 콘텐츠(AI 허용) 중 번역된 건수
+  let translation: { translated: number; target: number } | null = null;
+  if (admin) {
+    const { data: foreign } = await supabase
+      .from("content_items")
+      .select("original_url")
+      .eq("user_id", user.id)
+      .eq("provenance", "collected")
+      .eq("ai_processing_allowed", true)
+      .neq("language", "ko")
+      .limit(2000);
+    const urls = (foreign ?? []).map((r) => r.original_url as string);
+    const meta = await getAIMeta(urls);
+    translation = { target: new Set(urls).size, translated: [...meta.values()].filter((m) => m.title_ko).length };
+  }
   const aiEligible = ((allSources ?? []) as DataSource[]).filter((s) => s.user_id === null && !["linkedin_api", "user_provided", "demo"].includes(s.source_type));
   // 정렬: 수집 소스(유형별) → 직접 입력·DEMO → LinkedIn
   const TYPE_ORDER = ["news", "official_blog", "rss", "public_api", "social_api", "demo", "user_provided", "linkedin_api"];
@@ -131,6 +148,7 @@ export default async function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3 overflow-x-auto">
+            {translation ? <TranslateRunButton translated={translation.translated} target={translation.target} /> : null}
             <table className="w-full min-w-[820px] text-left text-xs" aria-label="데이터 소스 목록">
               <thead className="text-muted-foreground">
                 <tr className="border-b">

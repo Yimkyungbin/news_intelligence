@@ -38,6 +38,7 @@ export function TranslateToggle({ on: initial }: { on: boolean }) {
       <InfoTip label="한국어로 보기" align="right">
         <span className="block">외국어 콘텐츠의 제목·요약을 AI 번역본으로 보여 줍니다. 원문 제목도 함께 표시됩니다.</span>
         <span className="block">운영자가 AI 번역·요약을 허용한 출처만 번역되며, 나머지는 원문 그대로 표시됩니다.</span>
+        <span className="block">번역은 수집 후 자동으로 만들어집니다. 아직 번역되지 않은 콘텐츠는 원문으로 보입니다.</span>
       </InfoTip>
     </span>
   );
