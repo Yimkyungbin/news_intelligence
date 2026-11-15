@@ -623,7 +623,8 @@ def run():
                 # 번역·시사점은 응답 후 백그라운드(after)에서 생성 → 최대 30초 대기
                 cached = ""
                 for _ in range(60):
-                    cached = sql(f"select provider || ':' || is_demo::text from public.content_ai_cache where original_url = '{url}'")
+                    # 2단계(요약·시사점)까지 끝난 행 (1단계 제목 번역 → 2단계 순서)
+                    cached = sql(f"select provider || ':' || is_demo::text from public.content_ai_cache where original_url = '{url}' and stage = 'full'")
                     if cached:
                         break
                     time.sleep(0.5)
@@ -636,7 +637,7 @@ def run():
                 expect(page.get_by_text("번역·시사점 생성을 시작했습니다.")).to_be_visible(timeout=60000)
                 cached = ""
                 for _ in range(60):
-                    cached = sql(f"select provider from public.content_ai_cache where original_url = '{url}'")
+                    cached = sql(f"select provider from public.content_ai_cache where original_url = '{url}' and stage = 'full'")
                     if cached:
                         break
                     time.sleep(0.5)

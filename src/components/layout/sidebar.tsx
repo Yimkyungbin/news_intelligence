@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { Sparkles, X } from "lucide-react";
 import { NAV_ITEMS } from "./nav";
@@ -67,12 +69,28 @@ export function Sidebar() {
   );
 }
 
+/**
+ * 모바일 메뉴 (lg 미만)
+ * 상단 바(header)에 backdrop-blur 가 있어 그 안에서 fixed 로 그리면 header 높이에 갇힌다 → body 에 portal 로 렌더링
+ */
 export function MobileSidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
-  if (!open) return null;
-  return (
+  useEffect(() => {
+    if (!open) return;
+    // 열려 있는 동안 뒤 화면 스크롤 잠금, Esc 로 닫기
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, onClose]);
+  if (!open || typeof document === "undefined") return null;
+  return createPortal(
     <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="메뉴">
       <button className="absolute inset-0 bg-black/40" aria-label="메뉴 닫기" onClick={onClose} />
-      <div className="absolute inset-y-0 left-0 flex w-64 flex-col bg-sidebar shadow-xl">
+      <div className="absolute inset-y-0 left-0 flex w-64 max-w-[85vw] flex-col overflow-y-auto bg-sidebar shadow-xl">
         <div className="flex items-center justify-between pr-2">
           <Brand />
           <button onClick={onClose} className="rounded-md p-2 hover:bg-accent" aria-label="메뉴 닫기">
@@ -81,6 +99,7 @@ export function MobileSidebar({ open, onClose }: { open: boolean; onClose: () =>
         </div>
         <SidebarNav onNavigate={onClose} />
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

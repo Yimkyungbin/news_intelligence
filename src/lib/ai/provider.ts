@@ -1,9 +1,10 @@
 import "server-only";
 import { callOpenAI, cleanApiKey, type Usage } from "./openai";
-import { MOCK_MODEL, mockBatchMeta, mockBriefingInsight, mockContentInsight, mockTopicInsight, mockTrendInsight } from "./mock";
-import type { BatchMeta, BriefingInsight, ContentInsight, TopicInsight } from "./schemas";
+import { MOCK_MODEL, mockBatchMeta, mockBriefingInsight, mockContentInsight, mockTitleBatch, mockTopicInsight, mockTrendInsight } from "./mock";
+import type { BatchMeta, BriefingInsight, ContentInsight, TitleBatch, TopicInsight } from "./schemas";
 import {
   buildBatchMetaPrompt,
+  buildTitleBatchPrompt,
   buildBriefingInsightPrompt,
   buildContentInsightPrompt,
   buildTopicInsightPrompt,
@@ -28,6 +29,7 @@ export type AIProvider = {
   topicInsight(topic: { name: string; description: string | null; keywords: string[] }, items: PromptContent[]): Promise<{ output: TopicInsight; usage: Usage }>;
   briefingInsight(date: string, items: PromptContent[], keywords: string[]): Promise<{ output: BriefingInsight; usage: Usage }>;
   batchMeta(items: (PromptContent & { language: string })[]): Promise<{ output: BatchMeta; usage: Usage }>;
+  titleBatch(items: { title: string }[]): Promise<{ output: TitleBatch; usage: Usage }>;
   trendInsight(scope: string, items: PromptContent[], keywords: string[]): Promise<{ output: BriefingInsight; usage: Usage }>;
 };
 
@@ -64,6 +66,7 @@ export function getProvider(preferredModel?: string | null): AIProvider | null {
       topicInsight: async (t, items) => ({ output: mockTopicInsight(t.name, items), usage: NO_USAGE }),
       briefingInsight: async (_d, items) => ({ output: mockBriefingInsight(items), usage: NO_USAGE }),
       batchMeta: async (items) => ({ output: mockBatchMeta(items), usage: NO_USAGE }),
+      titleBatch: async (items) => ({ output: mockTitleBatch(items), usage: NO_USAGE }),
       trendInsight: async (_s, items) => ({ output: mockTrendInsight(items), usage: NO_USAGE }),
     };
   }
@@ -79,6 +82,8 @@ export function getProvider(preferredModel?: string | null): AIProvider | null {
     topicInsight: (t, items) => callOpenAI({ apiKey, model, task: "topic_insight", prompt: buildTopicInsightPrompt(t, items), maxOutputTokens: 3000 }),
     briefingInsight: (d, items, kw) => callOpenAI({ apiKey, model, task: "briefing_insight", prompt: buildBriefingInsightPrompt(d, items, kw), maxOutputTokens: 2000 }),
     batchMeta: (items) => callOpenAI({ apiKey, model, task: "batch_meta", prompt: buildBatchMetaPrompt(items), maxOutputTokens: 4000 }),
+    // 제목만: 응답이 짧아 빠름. 시간 상한도 짧게 (실패 시 2단계에서 다시 번역됨)
+    titleBatch: (items) => callOpenAI({ apiKey, model, task: "title_batch", prompt: buildTitleBatchPrompt(items), maxOutputTokens: 800, timeoutMs: 30_000 }),
     trendInsight: (s, items, kw) => callOpenAI({ apiKey, model, task: "briefing_insight", prompt: buildTrendInsightPrompt(s, items, kw), maxOutputTokens: 2000 }),
   };
 }
