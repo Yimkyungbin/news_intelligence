@@ -6,10 +6,13 @@ import { formatDate } from "@/lib/utils";
 import { ContentCard } from "@/components/content/content-card";
 import { TranslateToggle } from "@/components/content/translate-toggle";
 import { getAIMeta, getTranslatePref } from "@/lib/queries";
+import { untranslatedCount } from "@/lib/content";
 import { Badge, EmptyState, Input, PageHeader } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 
 export const metadata = { title: "Knowledge Base" };
+// 조회 후 백그라운드 자동 번역(after) 실행 시간 상한
+export const maxDuration = 300;
 
 export default async function KnowledgePage({ searchParams }: PageProps<"/knowledge">) {
   const sp = await searchParams;
@@ -40,7 +43,7 @@ export default async function KnowledgePage({ searchParams }: PageProps<"/knowle
       <PageHeader
         title="Knowledge Base"
         description="Saved Posts에서 'Knowledge Base에 추가'한 콘텐츠를 개인 지식으로 관리합니다. RAG 기반 의미 검색은 Phase 4에서 추가됩니다."
-        actions={<TranslateToggle on={translate} />}
+        actions={<TranslateToggle on={translate} untranslated={untranslatedCount(items.map((p) => p.content), meta)} />}
       />
       <Form action="/knowledge" className="mb-4 flex gap-2" role="search">
         <label htmlFor="kb-q" className="sr-only">

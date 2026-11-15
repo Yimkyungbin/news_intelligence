@@ -628,6 +628,19 @@ def run():
                         break
                     time.sleep(0.5)
                 assert cached == "mock:true", f"백그라운드 번역 미생성: {cached!r}"
+                # 운영자 '누락 번역 생성': 번역을 지운 뒤 버튼으로 다시 생성 (허용 스위치 재조작 없이)
+                sql(f"delete from public.content_ai_cache where original_url = '{url}'")
+                page.reload()
+                expect(page.get_by_label("번역 현황")).to_contain_text("미번역")
+                page.get_by_role("button", name="누락 번역 생성").click()
+                expect(page.get_by_text("번역·시사점 생성을 시작했습니다.")).to_be_visible(timeout=60000)
+                cached = ""
+                for _ in range(60):
+                    cached = sql(f"select provider from public.content_ai_cache where original_url = '{url}'")
+                    if cached:
+                        break
+                    time.sleep(0.5)
+                assert cached == "mock", f"누락 번역 재생성 실패: {cached!r}"
 
                 page.goto(f"{BASE}/trending?period=weekly&limit=50")
                 card = page.locator("article", has=page.get_by_text(f"원문: {title}"))

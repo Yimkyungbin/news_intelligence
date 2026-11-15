@@ -1,5 +1,5 @@
 import "server-only";
-import { callOpenAI, type Usage } from "./openai";
+import { callOpenAI, cleanApiKey, type Usage } from "./openai";
 import { MOCK_MODEL, mockBatchMeta, mockBriefingInsight, mockContentInsight, mockTopicInsight, mockTrendInsight } from "./mock";
 import type { BatchMeta, BriefingInsight, ContentInsight, TopicInsight } from "./schemas";
 import {
@@ -38,7 +38,10 @@ const isProduction = () => process.env.VERCEL_ENV === "production";
 
 export function providerStatus(): ProviderStatus {
   const pref = process.env.AI_PROVIDER;
-  const hasKey = Boolean(process.env.OPENAI_API_KEY);
+  const hasKey = Boolean(cleanApiKey(process.env.OPENAI_API_KEY));
+  if (process.env.OPENAI_API_KEY && !hasKey && pref !== "mock") {
+    return { mode: "disabled", reason: "OPENAI_API_KEY 값에 공백·따옴표·한글 등 사용할 수 없는 문자가 있습니다. Vercel 환경변수 값을 다시 입력하세요." };
+  }
   if (pref === "mock") {
     return isProduction() ? { mode: "disabled", reason: "운영 환경에서는 모의 AI를 사용할 수 없습니다." } : { mode: "mock", reason: "AI_PROVIDER=mock (DEMO)" };
   }
@@ -65,7 +68,7 @@ export function getProvider(preferredModel?: string | null): AIProvider | null {
     };
   }
 
-  const apiKey = process.env.OPENAI_API_KEY as string;
+  const apiKey = cleanApiKey(process.env.OPENAI_API_KEY) as string;
   const model = (AI_MODELS as readonly string[]).includes(preferredModel ?? "") ? (preferredModel as string) : AI_MODELS[0];
   return {
     name: "openai",

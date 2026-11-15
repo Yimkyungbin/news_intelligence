@@ -8,6 +8,7 @@ import { CONTENT_SELECT, type Folder, type SavedPost } from "@/lib/types";
 import { ContentCard } from "@/components/content/content-card";
 import { TranslateToggle } from "@/components/content/translate-toggle";
 import { getAIMeta, getTranslatePref } from "@/lib/queries";
+import { untranslatedCount } from "@/lib/content";
 import { ConfirmButton } from "@/components/confirm-button";
 import { Badge, EmptyState, Input, PageHeader } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,8 @@ import { deleteFolder } from "./actions";
 import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Saved Posts" };
+// 조회 후 백그라운드 자동 번역(after) 실행 시간 상한
+export const maxDuration = 300;
 
 export default async function SavedPage({ searchParams }: PageProps<"/saved">) {
   const sp = await searchParams;
@@ -64,7 +67,7 @@ export default async function SavedPage({ searchParams }: PageProps<"/saved">) {
 
   return (
     <>
-      <PageHeader title="Saved Posts" description="북마크한 콘텐츠를 폴더·태그·메모로 관리합니다." actions={<TranslateToggle on={translate} />} />
+      <PageHeader title="Saved Posts" description="북마크한 콘텐츠를 폴더·태그·메모로 관리합니다." actions={<TranslateToggle on={translate} untranslated={untranslatedCount(posts.map((p) => p.content), meta)} />} />
       <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
         <aside className="flex flex-col gap-4" aria-label="폴더 및 태그">
           <div>

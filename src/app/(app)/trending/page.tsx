@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getAIMeta, getSavedContentIds, getTranslatePref } from "@/lib/queries";
-import { displayTitle, rankContent } from "@/lib/content";
+import { displayTitle, rankContent, untranslatedCount } from "@/lib/content";
 import { CATEGORIES, categoryDef, itemCategory } from "@/lib/categories";
 import { cn, daysAgoIso } from "@/lib/utils";
 import { trendDelta } from "@/lib/trends/compute";
@@ -104,7 +104,7 @@ export default async function TrendingPage({ searchParams }: PageProps<"/trendin
       <PageHeader
         title="Trending Posts"
         description="수집된 콘텐츠 중 인기 콘텐츠를 확인합니다. LinkedIn 전체 인기 순위가 아닙니다."
-        actions={<TranslateToggle on={translate} />}
+        actions={<TranslateToggle on={translate} untranslated={untranslatedCount([...result.items, ...groups.flatMap((g) => g.top)], meta)} />}
       />
 
       <div className="mb-3 flex gap-1 border-b" role="tablist" aria-label="보기 방식">

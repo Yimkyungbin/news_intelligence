@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { getSavedContentIds, getTranslatePref } from "@/lib/queries";
+import { untranslatedCount } from "@/lib/content";
 import { loadPaperBoard, PAPER_PERIODS, PAPER_SOURCES, type PaperPeriod, type PaperSourceSlug } from "@/lib/trends/board";
 import { cn } from "@/lib/utils";
 import { TrendCard } from "@/components/trends/trend-card";
@@ -9,6 +10,8 @@ import { InfoTip } from "@/components/info-tip";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, PageHeader } from "@/components/ui/primitives";
 
 export const metadata = { title: "Papers" };
+// 조회 후 백그라운드 자동 번역(after) 실행 시간 상한
+export const maxDuration = 300;
 
 const SORTS = { popular: "추천·인용순", latest: "최신순" } as const;
 const LIMIT = 30;
@@ -36,7 +39,7 @@ export default async function PapersPage({ searchParams }: PageProps<"/papers">)
 
   return (
     <>
-      <PageHeader title="Papers" description="arXiv, Hugging Face Daily Papers, OpenAlex에서 수집한 IT·AI 논문입니다. 관심 주제와 일치한 논문만 저장됩니다." actions={<TranslateToggle on={translate} />} />
+      <PageHeader title="Papers" description="arXiv, Hugging Face Daily Papers, OpenAlex에서 수집한 IT·AI 논문입니다. 관심 주제와 일치한 논문만 저장됩니다." actions={<TranslateToggle on={translate} untranslated={untranslatedCount(board.entries.map((e) => e.item), board.meta)} />} />
 
       <div className="mb-4 flex flex-col gap-2 rounded-lg border bg-card p-3">
         <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="기간">

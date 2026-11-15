@@ -1,7 +1,7 @@
 // 대시보드 고도화 단위 테스트: 순위 정규화·다양성, 키워드 정리, 게시일 기준 차트
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { dailyBuckets, rankContent, topKeywords } from "../../src/lib/content.ts";
+import { dailyBuckets, rankContent, topKeywords, untranslatedCount } from "../../src/lib/content.ts";
 import { mergePluralCounts, normalizeKeyword, normalizeKeywords } from "../../src/lib/keywords.ts";
 
 type Item = {
@@ -128,5 +128,17 @@ describe("일자별 차트", () => {
     assert.equal(buckets.length, 7);
     assert.equal(buckets.find((b) => b.day === "11. 8.")?.count, 2);
     assert.equal(buckets.at(-1)?.count, 1);
+  });
+});
+
+describe("번역 대기 건수 (한국어로 보기 자동 새로고침)", () => {
+  const it = (url: string, language: string, ai = true) => ({ original_url: url, language, ai_processing_allowed: ai });
+  test("외국어·AI 허용·번역 없음만 세고, 같은 URL 은 한 번", () => {
+    const meta = new Map([
+      ["https://a/1", { title_ko: "번역됨" }],
+      ["https://a/2", { title_ko: null }],
+    ]);
+    const items = [it("https://a/1", "en"), it("https://a/2", "en"), it("https://a/3", "en"), it("https://a/3", "en"), it("https://a/4", "ko"), it("https://a/5", "en", false)];
+    assert.equal(untranslatedCount(items, meta), 2); // a/2(시사점만 있고 번역 없음), a/3
   });
 });

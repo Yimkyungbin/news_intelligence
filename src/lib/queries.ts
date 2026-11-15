@@ -1,5 +1,7 @@
 import "server-only";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { fillMissingTranslations } from "@/lib/ai/system";
 import { CONTENT_SELECT, type ContentAIMeta, type ContentItem } from "@/lib/types";
 import { getDisabledSourceIds, hiddenSourceFilter } from "@/lib/source-settings";
 
@@ -67,6 +69,15 @@ export async function getAIMeta(urls: string[]): Promise<Map<string, ContentAIMe
       .in("original_url", uniq.slice(i, i + 200));
     for (const r of data ?? []) {
       out.set(r.original_url as string, { title_ko: r.title_ko, summary_ko: r.summary_ko, implication_ko: r.implication_ko, is_demo: r.is_demo });
+    }
+  }
+  // 번역이 없는 콘텐츠는 응답 후 백그라운드에서 번역 (다음 새로고침부터 표시). 허용 출처·하루 한도는 서버에서 다시 확인
+  const missing = uniq.filter((u) => !out.has(u));
+  if (missing.length) {
+    try {
+      after(() => fillMissingTranslations(missing));
+    } catch {
+      // 요청 범위 밖(빌드 등)에서는 건너뜀
     }
   }
   return out;
