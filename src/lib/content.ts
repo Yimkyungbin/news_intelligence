@@ -15,6 +15,16 @@ export function displaySummary(item: Pick<ContentItem, "title" | "summary" | "co
   return isLinkOnly(item.summary) ? null : item.summary;
 }
 
+/** 화면 콘텐츠 중 번역 대상(외국어·AI 허용)인데 아직 번역이 없는 건수 → '번역 중' 표시·자동 새로고침 */
+export function untranslatedCount(
+  items: Pick<ContentItem, "original_url" | "language" | "ai_processing_allowed">[],
+  meta: Map<string, { title_ko: string | null }>,
+): number {
+  const seen = new Set<string>();
+  for (const i of items) if (i.language !== "ko" && i.ai_processing_allowed && !meta.get(i.original_url)?.title_ko) seen.add(i.original_url);
+  return seen.size;
+}
+
 export const CONTENT_TYPE_LABELS: Record<string, string> = {
   article: "기사",
   post: "SNS",

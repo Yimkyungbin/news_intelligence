@@ -98,6 +98,7 @@ export function buildBatchMetaPrompt(items: (PromptContent & { language: string 
   return {
     system: [
       "너는 기술 뉴스 편집자다. 각 item 에 대해 JSON 으로 답한다. items 배열의 n 은 item id 번호다.",
+      `입력 item 은 ${list.length}개다. items 배열에 n=1 부터 n=${list.length} 까지 모든 item 을 빠짐없이 정확히 한 번씩 포함한다.`,
       ...COMMON_RULES,
       'lang="foreign" 인 item: title_ko 에 제목을 자연스러운 한국어로 번역하고, summary_ko 에 요약을 한국어로 번역한다(요약이 없으면 빈 문자열).',
       'lang="ko" 인 item: title_ko 와 summary_ko 는 빈 문자열로 둔다.',

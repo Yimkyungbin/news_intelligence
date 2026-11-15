@@ -31,7 +31,7 @@ type Row = {
 };
 
 export async function processSystemAI(
-  opts: { maxItems?: number; sourceId?: string; sourceIds?: string[]; skipMock?: boolean } = {},
+  opts: { maxItems?: number; sourceId?: string; sourceIds?: string[]; urls?: string[]; skipMock?: boolean } = {},
 ): Promise<{ processed: number; calls: number; message: string }> {
   const db = createAdminClient();
   if (!db) return { processed: 0, calls: 0, message: "SUPABASE_SECRET_KEY 미설정" };
@@ -63,23 +63,30 @@ export async function processSystemAI(
     .limit(1000);
   if (opts.sourceId) q = q.eq("source_id", opts.sourceId);
   if (opts.sourceIds?.length) q = q.in("source_id", opts.sourceIds);
+  // 화면에 보인 콘텐츠만 (조회 시 자동 번역)
+  if (opts.urls?.length) q = q.in("original_url", opts.urls.slice(0, 200));
   const { data } = await q;
 
   const uniq = new Map<string, Row>();
   for (const r of (data ?? []) as unknown as Row[]) if (!uniq.has(r.original_url)) uniq.set(r.original_url, r);
   const urls = [...uniq.keys()];
+  // 완료로 보는 캐시: 외국어는 번역 제목이 있을 때만 (시사점만 저장되고 번역이 빠진 행은 다시 처리)
   const cached = new Set<string>();
   for (let i = 0; i < urls.length; i += 200) {
-    const { data: c } = await db.from("content_ai_cache").select("original_url").in("original_url", urls.slice(i, i + 200));
-    for (const r of c ?? []) cached.add(r.original_url as string);
+    const { data: c } = await db.from("content_ai_cache").select("original_url,title_ko,source_language").in("original_url", urls.slice(i, i + 200));
+    for (const r of c ?? []) if (r.title_ko || r.source_language === "ko") cached.add(r.original_url as string);
   }
   const todo = filterAIAllowed([...uniq.values()].filter((r) => !cached.has(r.original_url)), p.external).slice(0, opts.maxItems ?? 100);
 
   let processed = 0;
   let calls = 0;
   let lastError = "";
-  for (let i = 0; i < todo.length && budget > 0; i += BATCH_SIZE) {
-    const batch = todo.slice(i, i + BATCH_SIZE);
+  // 모델이 일부 item 을 빠뜨리면 빠진 것만 모아 1회 더 시도 (재시도분은 큐 뒤에 붙임)
+  const queue: Row[][] = [];
+  for (let i = 0; i < todo.length; i += BATCH_SIZE) queue.push(todo.slice(i, i + BATCH_SIZE));
+  const retried = new Set<string>();
+  while (queue.length && budget > 0) {
+    const batch = queue.shift()!;
     const base = { ai_call: true, task: "batch_meta", provider: p.name, model: p.model, items: batch.length };
     const { data: log } = await db.from("collection_logs").insert({ job_type: "system_ai", status: "running", details: base }).select("id").single();
     budget--;
@@ -108,7 +115,14 @@ export async function processSystemAI(
         if (error) throw new Error("번역 결과를 저장하지 못했습니다.");
       }
       processed += rows.length;
-      if (log?.id) await db.from("collection_logs").update({ status: "success", completed_at: new Date().toISOString(), collected_count: rows.length, details: { ...base, usage } }).eq("id", log.id);
+      // 빠진 item: 응답에 없거나, 외국어인데 번역 제목이 비어 있는 것 → 1회만 재시도
+      const done = new Set(rows.filter((r) => r.title_ko || r.source_language === "ko").map((r) => r.original_url));
+      const missed = batch.filter((b) => !done.has(b.original_url) && !retried.has(b.original_url));
+      if (missed.length) {
+        for (const m of missed) retried.add(m.original_url);
+        queue.push(missed);
+      }
+      if (log?.id) await db.from("collection_logs").update({ status: "success", completed_at: new Date().toISOString(), collected_count: rows.length, details: { ...base, usage, missed: missed.length } }).eq("id", log.id);
     } catch (e) {
       lastError = e instanceof AIError ? e.message : "AI 처리 중 오류가 발생했습니다.";
       if (log?.id) await db.from("collection_logs").update({ status: "failed", completed_at: new Date().toISOString(), error_message: lastError }).eq("id", log.id);
@@ -117,6 +131,30 @@ export async function processSystemAI(
   }
   const message = todo.length === 0 ? "처리할 콘텐츠가 없습니다." : `번역·시사점 ${processed}건 생성${lastError ? ` (일부 실패: ${lastError})` : ""}`;
   return { processed, calls, message };
+}
+
+/** 조회 시 자동 번역: 같은 시점에 여러 화면이 동시에 호출해도 한 번만 돌도록 최근 실행 중 기록이 있으면 건너뜀 */
+const FILL_THROTTLE_MS = 90_000;
+const FILL_MAX_ITEMS = 30;
+
+/**
+ * 화면에 보인 외국어 콘텐츠 중 번역이 없는 것을 응답 후 백그라운드로 번역 (요구사항 5: 한국어로 보기)
+ * - 수집·허용 시점 번역이 실패했거나 아직 돌지 않은 경우에도 사용자가 보는 순간 채워짐
+ * - 운영자가 허용한 출처만 (processSystemAI 의 필터 그대로), 시스템 하루 한도 공유, 모의 AI 결과는 캐시에 남기지 않음
+ */
+export async function fillMissingTranslations(urls: string[]): Promise<void> {
+  if (urls.length === 0) return;
+  const db = createAdminClient();
+  if (!db) return;
+  const { count } = await db
+    .from("collection_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("job_type", "system_ai")
+    .eq("status", "running")
+    .gte("started_at", new Date(Date.now() - FILL_THROTTLE_MS).toISOString());
+  if ((count ?? 0) > 0) return;
+  const res = await processSystemAI({ urls, maxItems: FILL_MAX_ITEMS, skipMock: true });
+  if (res.calls) console.info("[system-ai] 조회 시 자동 번역:", res.message);
 }
 
 /** AI 허용을 바꿀 수 있는 시스템 소스 id 목록 */

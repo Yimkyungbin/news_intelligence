@@ -3,6 +3,7 @@ import { ArrowRight, CalendarDays, Flame, Sparkles, TrendingUp } from "lucide-re
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getAIMeta, getSavedContentIds, getTranslatePref } from "@/lib/queries";
+import { untranslatedCount } from "@/lib/content";
 import { getDisabledSourceIds } from "@/lib/source-settings";
 import { CATEGORIES, categoryDef, isCategorySlug } from "@/lib/categories";
 import { BOARD_PERIODS, loadTrendBoard, type BoardPeriod } from "@/lib/trends/board";
@@ -185,7 +186,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
             </Link>
           </p>
         </div>
-        <TranslateToggle on={translate} />
+        <TranslateToggle on={translate} untranslated={untranslatedCount(board.top.map((e) => e.item), board.meta)} />
       </div>
 
       <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">

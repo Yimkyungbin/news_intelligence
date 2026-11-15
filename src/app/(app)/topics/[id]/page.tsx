@@ -6,7 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getAIMeta, getSavedContentIds, getTranslatePref, listContent } from "@/lib/queries";
 import { TranslateToggle } from "@/components/content/translate-toggle";
-import { topKeywords } from "@/lib/content";
+import { topKeywords, untranslatedCount } from "@/lib/content";
 import { formatDate } from "@/lib/utils";
 import { ContentCard } from "@/components/content/content-card";
 import { TopicInsightCard } from "@/components/briefing/topic-insight-card";
@@ -50,7 +50,7 @@ export default async function TopicDetailPage({ params }: PageProps<"/topics/[id
       <Link href="/topics" className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-3 w-3" /> My Topics
       </Link>
-      <PageHeader title={topic.name} description={topic.description ?? undefined} actions={<TranslateToggle on={translate} />} />
+      <PageHeader title={topic.name} description={topic.description ?? undefined} actions={<TranslateToggle on={translate} untranslated={untranslatedCount(items, meta)} />} />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="flex flex-col gap-2 lg:col-span-2">

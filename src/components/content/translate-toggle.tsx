@@ -1,18 +1,44 @@
 "use client";
 
-import { useOptimistic, useTransition } from "react";
-import { Languages } from "lucide-react";
+import { useEffect, useOptimistic, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Languages, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { setTranslatePreference } from "@/app/(app)/content/pref-actions";
 import { InfoTip } from "@/components/info-tip";
 import { cn } from "@/lib/utils";
 
-/** "한국어로 보기" 토글 (Dashboard·Trending·Papers·주제 상세·Saved Posts·Knowledge Base 공통, 사용자 설정 하나) */
-export function TranslateToggle({ on: initial }: { on: boolean }) {
+/** 백그라운드 번역 대기 시 자동 새로고침 간격·최대 횟수 (번역할 수 없는 콘텐츠가 남아도 무한 반복하지 않음) */
+const REFRESH_MS = 20_000;
+const MAX_REFRESH = 4;
+
+/**
+ * "한국어로 보기" 토글 (Dashboard·Trending·Papers·주제 상세·Saved Posts·Knowledge Base 공통, 사용자 설정 하나)
+ * untranslated: 이 화면의 외국어 콘텐츠 중 아직 번역이 없는 건수. 켜져 있고 남아 있으면 '번역 중' 표시 후 자동 새로고침
+ */
+export function TranslateToggle({ on: initial, untranslated = 0 }: { on: boolean; untranslated?: number }) {
   const [on, setOn] = useOptimistic(initial);
   const [pending, start] = useTransition();
+  const router = useRouter();
+  const [refreshes, setRefreshes] = useState(0);
+  const waiting = on && untranslated > 0 && refreshes < MAX_REFRESH;
+  useEffect(() => {
+    if (!waiting) return;
+    const t = setTimeout(() => {
+      setRefreshes((n) => n + 1);
+      router.refresh();
+    }, REFRESH_MS);
+    return () => clearTimeout(t);
+    // refreshes 를 넣어 새로고침마다 다음 타이머를 다시 건다 (건수가 그대로여도 최대 MAX_REFRESH 회까지)
+  }, [waiting, refreshes, router]);
   return (
     <span className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs">
+      {waiting ? (
+        <span className="inline-flex items-center gap-1 text-muted-foreground" role="status" aria-label={`번역 중 ${untranslated}건`}>
+          <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> 번역 중 {untranslated}건
+          <span className="mx-0.5 h-3 w-px bg-border" aria-hidden="true" />
+        </span>
+      ) : null}
       <Languages className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
       <span id="translate-toggle-label">한국어로 보기</span>
       <button
