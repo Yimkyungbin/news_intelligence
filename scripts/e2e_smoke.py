@@ -738,6 +738,37 @@ def run():
 
         check("Settings 소스 로고/권한 표시 + 프로필 저장", settings)
 
+        def user_feed_toggle():
+            uid = sql(f"select id from public.profiles where email = '{EMAIL}'")
+            for slug, name in [("e2e-feed-a", "E2E 피드 A"), ("e2e-feed-b", "E2E 피드 B")]:
+                sql(
+                    "insert into public.data_sources (user_id, slug, name, source_type, source_url, permission_status, is_active) values "
+                    f"('{uid}', '{slug}', '{name}', 'rss', 'https://feeds.example.org/{slug}.xml', 'NOT_VERIFIED', true)"
+                )
+            active = lambda slug: sql(f"select is_active::text from public.data_sources where user_id = '{uid}' and slug = '{slug}'")
+            try:
+                page.goto(f"{BASE}/settings")
+                feeds = page.get_by_role("list", name="내 RSS 피드 목록")
+                # 피드 하나 끄기 → 수집 꺼짐 표시, DB 반영
+                feeds.get_by_role("switch", name="E2E 피드 A 수집 끄기").click()
+                expect(page.get_by_text("'E2E 피드 A' 피드 수집을 껐습니다.", exact=False)).to_be_visible(timeout=30000)
+                assert active("e2e-feed-a") == "false" and active("e2e-feed-b") == "true"
+                page.reload()
+                expect(feeds.get_by_role("switch", name="E2E 피드 A 수집 켜기")).to_have_attribute("aria-checked", "false")
+                expect(page.get_by_text("수집 중 1/2")).to_be_visible()
+                # 전체 켜기 → 모두 수집, 전체 끄기 → 모두 꺼짐
+                page.get_by_role("switch", name="내 피드 전체 수집 켜기").click()
+                expect(page.get_by_text("내 피드 2개의 수집을 모두 켰습니다.")).to_be_visible(timeout=30000)
+                assert active("e2e-feed-a") == "true" and active("e2e-feed-b") == "true"
+                page.reload()
+                page.get_by_role("switch", name="내 피드 전체 수집 끄기").click()
+                expect(page.get_by_text("내 피드 2개의 수집을 모두 껐습니다.", exact=False)).to_be_visible(timeout=30000)
+                assert active("e2e-feed-a") == "false" and active("e2e-feed-b") == "false"
+            finally:
+                sql(f"delete from public.data_sources where user_id = '{uid}' and slug in ('e2e-feed-a', 'e2e-feed-b')")
+
+        check("내 RSS 피드 수집 on/off 스위치·전체 켜기/끄기", user_feed_toggle)
+
         def phase2_collection():
             # 요구사항 6.2: 로컬 fixture 피드로 수집 → 표시·분류·이력·제한 검증 (외부 네트워크 미사용)
             import functools

@@ -1,7 +1,8 @@
-import { Check, ExternalLink, Minus, Power, Trash2 } from "lucide-react";
-import { ActionButton, ConfirmButton } from "@/components/confirm-button";
+import { Check, ExternalLink, Minus, Trash2 } from "lucide-react";
+import { ConfirmButton } from "@/components/confirm-button";
 import { AddFeedForm, CollectNowButton } from "./collect-forms";
-import { deleteUserFeed, setUserFeedActive } from "./collect-actions";
+import { deleteUserFeed } from "./collect-actions";
+import { FeedBulkToggle, FeedToggle } from "./feed-toggle";
 import { SourceToggle } from "./source-toggle";
 import { BulkToggle } from "./bulk-toggle";
 import { TranslateRunButton } from "./translate-run-button";
@@ -289,9 +290,14 @@ export default async function SettingsPage() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>내 RSS 피드</CardTitle>
-            <CardDescription>인플루언서 개인 블로그·뉴스레터 피드를 추가합니다. AI 처리는 기본 차단되며 콘텐츠는 본인에게만 저장됩니다.</CardDescription>
+          <CardHeader className="flex-row items-start justify-between gap-2">
+            <div>
+              <CardTitle>내 RSS 피드</CardTitle>
+              <CardDescription>
+                인플루언서 개인 블로그·뉴스레터 피드를 추가합니다. AI 처리는 기본 차단되며 콘텐츠는 본인에게만 저장됩니다. 스위치로 피드별 수집을 켜고 끌 수 있고, 끈 피드의 기존 콘텐츠는 유지됩니다.
+              </CardDescription>
+            </div>
+            {myFeeds.length ? <FeedBulkToggle activeCount={myFeeds.filter((f) => f.is_active).length} total={myFeeds.length} /> : null}
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <AddFeedForm />
@@ -302,17 +308,9 @@ export default async function SettingsPage() {
                     <SourceBadge name={f.name} sourceType={f.source_type} homepageUrl={f.homepage_url} size="sm" showType={false} />
                     <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{f.source_url}</span>
                     <Badge variant={f.is_active ? (f.connection_status === "error" ? "destructive" : "success") : "outline"}>
-                      {f.is_active ? (f.connection_status === "error" ? "오류" : "수집 중") : "중지"}
+                      {f.is_active ? (f.connection_status === "error" ? "오류" : "수집 중") : "수집 꺼짐"}
                     </Badge>
-                    <ActionButton
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={f.is_active ? `${f.name} 비활성화` : `${f.name} 활성화`}
-                      title={f.is_active ? "비활성화" : "활성화"}
-                      action={setUserFeedActive.bind(null, f.id, !f.is_active)}
-                    >
-                      <Power />
-                    </ActionButton>
+                    <FeedToggle feedId={f.id} name={f.name} active={f.is_active} />
                     <ConfirmButton
                       variant="ghost"
                       size="icon-sm"

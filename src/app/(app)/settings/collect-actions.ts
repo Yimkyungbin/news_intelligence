@@ -102,10 +102,31 @@ export async function setUserFeedActive(sourceId: string, active: boolean): Prom
   const id = uuid.safeParse(sourceId);
   if (!id.success) return { ok: false, message: "잘못된 요청입니다." };
   const { supabase, userId } = await authedClient();
-  const { error } = await supabase.from("data_sources").update({ is_active: active }).eq("id", id.data).eq("user_id", userId);
-  if (error) return { ok: false, message: "변경하지 못했습니다." };
+  const { data, error } = await supabase
+    .from("data_sources")
+    .update({ is_active: active })
+    .eq("id", id.data)
+    .eq("user_id", userId)
+    .select("name")
+    .maybeSingle();
+  if (error || !data) return { ok: false, message: "변경하지 못했습니다." };
   revalidatePath("/settings");
-  return { ok: true, message: active ? "피드를 활성화했습니다." : "피드를 비활성화했습니다." };
+  return {
+    ok: true,
+    message: active ? `'${data.name}' 피드 수집을 켰습니다.` : `'${data.name}' 피드 수집을 껐습니다. 이미 수집된 콘텐츠는 유지됩니다.`,
+  };
+}
+
+/** 내 RSS 피드 전체 수집 켜기/끄기 */
+export async function setAllUserFeedsActive(active: boolean): Promise<ActionState> {
+  if (typeof active !== "boolean") return { ok: false, message: "잘못된 요청입니다." };
+  const { supabase, userId } = await authedClient();
+  const { data, error } = await supabase.from("data_sources").update({ is_active: active }).eq("user_id", userId).select("id");
+  if (error) return { ok: false, message: "변경하지 못했습니다." };
+  const n = data?.length ?? 0;
+  if (n === 0) return { ok: false, message: "등록된 피드가 없습니다." };
+  revalidatePath("/settings");
+  return { ok: true, message: active ? `내 피드 ${n}개의 수집을 모두 켰습니다.` : `내 피드 ${n}개의 수집을 모두 껐습니다. 이미 수집된 콘텐츠는 유지됩니다.` };
 }
 
 export async function deleteUserFeed(sourceId: string): Promise<ActionState> {
