@@ -12,6 +12,7 @@ import {
   type PromptContent,
 } from "./prompts";
 import { AI_MODELS } from "@/lib/types";
+import { TITLE_MAX_OUTPUT_TOKENS } from "./stages";
 
 /**
  * 교체 가능한 AI Provider (요구사항 5 AI: 모델 교체 가능 구조)
@@ -83,7 +84,8 @@ export function getProvider(preferredModel?: string | null): AIProvider | null {
     briefingInsight: (d, items, kw) => callOpenAI({ apiKey, model, task: "briefing_insight", prompt: buildBriefingInsightPrompt(d, items, kw), maxOutputTokens: 2000 }),
     batchMeta: (items) => callOpenAI({ apiKey, model, task: "batch_meta", prompt: buildBatchMetaPrompt(items), maxOutputTokens: 4000 }),
     // 제목만: 응답이 짧아 빠름. 시간 상한도 짧게 (실패 시 2단계에서 다시 번역됨)
-    titleBatch: (items) => callOpenAI({ apiKey, model, task: "title_batch", prompt: buildTitleBatchPrompt(items), maxOutputTokens: 800, timeoutMs: 30_000 }),
+    // 출력 상한: 800 은 긴 제목 5건에서 '출력 길이 초과'가 났음(운영 46회 중 2회) → 1500. 상한일 뿐 실제 사용량만 과금
+    titleBatch: (items) => callOpenAI({ apiKey, model, task: "title_batch", prompt: buildTitleBatchPrompt(items), maxOutputTokens: TITLE_MAX_OUTPUT_TOKENS, timeoutMs: 30_000 }),
     trendInsight: (s, items, kw) => callOpenAI({ apiKey, model, task: "briefing_insight", prompt: buildTrendInsightPrompt(s, items, kw), maxOutputTokens: 2000 }),
   };
 }
