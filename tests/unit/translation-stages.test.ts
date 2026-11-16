@@ -1,7 +1,7 @@
 // 번역 2단계 처리 단위 테스트: 단계별 대상, 화면 순서, 제목 번역 프롬프트·스키마
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { chunk, orderByUrls, planStages, STAGE_CONFIG, type CacheState } from "../../src/lib/ai/stages.ts";
+import { chunk, orderByUrls, planStages, STAGE_CONFIG, TITLE_MAX_OUTPUT_TOKENS, type CacheState } from "../../src/lib/ai/stages.ts";
 import { buildTitleBatchPrompt, TITLE_BATCH_SIZE } from "../../src/lib/ai/prompts.ts";
 import { parseTaskOutput } from "../../src/lib/ai/openai.ts";
 import { mockTitleBatch } from "../../src/lib/ai/mock.ts";
@@ -34,6 +34,10 @@ describe("단계별 처리 대상", () => {
     assert.deepEqual(chunk([1, 2, 3, 4, 5, 6, 7], 5), [[1, 2, 3, 4, 5], [6, 7]]);
     assert.ok(STAGE_CONFIG.title.batch < STAGE_CONFIG.full.batch);
     assert.ok(STAGE_CONFIG.title.concurrency >= STAGE_CONFIG.full.concurrency);
+  });
+
+  test("제목 번역 출력 상한: 운영 '출력 길이 초과'(800) 재발 방지", () => {
+    assert.ok(TITLE_MAX_OUTPUT_TOKENS >= 1500);
   });
 });
 

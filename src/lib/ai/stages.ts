@@ -38,6 +38,9 @@ export function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
+/** 1단계 제목 번역 응답 길이 상한 (토큰). 제목 5건 + 모델 내부 추론 여유 */
+export const TITLE_MAX_OUTPUT_TOKENS = 1500;
+
 /** 단계별 배치 크기·동시 실행 수 */
 export const STAGE_CONFIG: Record<Stage, { batch: number; concurrency: number }> = {
   title: { batch: 5, concurrency: 3 },
